@@ -1,0 +1,30 @@
+{
+    "name": "Red.ProportionAdjuster.Editor",
+    "rootNamespace": "Red.Proportions",
+    "references": [
+        "Red.ProportionAdjuster",
+        "VRC.SDKBase",
+        "VRC.SDK3A",
+        "nadena.dev.ndmf",
+        "nadena.dev.ndmf.runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "RED_PROPORTIONS_NDMF"
+    ],
+    "versionDefines": [
+        {
+            "name": "nadena.dev.ndmf",
+            "expression": "1.8.0",
+            "define": "RED_PROPORTIONS_NDMF"
+        }
+    ],
+    "noEngineReferences": false
+}
