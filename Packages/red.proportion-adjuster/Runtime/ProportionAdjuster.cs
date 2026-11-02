@@ -18,7 +18,7 @@ namespace Red.Proportions
         // 0 means not measured yet: the avatar's own measurements are filled in when the component
         // is added to an avatar, or when it is first inspected there (the prefab).
         [Header("Player measurements (cm, standing)")]
-        [Tooltip("Floor to eyes.")]
+        [Tooltip("Floor to eyes. Only used to turn the other measurements into proportions: the avatar keeps its overall size. To be your height in game, use VRChat's avatar scaling.")]
         public float eyeHeightCm;
         [Tooltip("Floor to the hip joint (the bony bump on the side of the hip).")]
         public float hipHeightCm;

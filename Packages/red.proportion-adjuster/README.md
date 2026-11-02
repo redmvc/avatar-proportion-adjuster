@@ -24,7 +24,9 @@ Without NDMF the component shows an error, and any build of an avatar that has i
    Adjuster** on the avatar or any object inside it. The fields fill in with the avatar's current
    proportions, so on its own it changes nothing.
 2. Measure yourself standing, in cm. All heights are from the floor:
-   - **Eye height**: floor to your eyes.
+   - **Eye height**: floor to your eyes. This only turns the other measurements into
+     proportions; the avatar keeps its overall size. To be your real height in game, use
+     VRChat's avatar scaling.
    - **Hip height**: floor to the hip joint, the bony bump on the side of your hip.
    - **Knee height**: floor to the knee joint, the gap at the side of your knee.
    - **Shoulder to elbow** and **elbow to wrist**: joint centre to joint centre.
