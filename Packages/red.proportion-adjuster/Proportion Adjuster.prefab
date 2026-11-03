@@ -53,6 +53,8 @@ MonoBehaviour:
   shinThickness: 1
   upperArmThickness: 1
   forearmThickness: 1
+  neckLength: 1
+  neckThickness: 1
   adjustLegs: 1
   adjustArms: 1
   rebuildHumanoidAvatar: 1

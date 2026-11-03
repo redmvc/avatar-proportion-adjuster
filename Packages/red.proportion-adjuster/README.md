@@ -1,7 +1,8 @@
 # Proportion Adjuster
 
 Reshapes a VRChat avatar's legs and arms to your own proportions when the avatar is built, so in
-full-body tracking the feet meet your real floor. The scene is never changed.
+full-body tracking the feet meet your real floor, and can shorten or lengthen the neck. The scene
+is never changed.
 
 VRChat scales your avatar so its eyes match yours, so only proportions relative to eye height
 matter. The hips come down until hip height / eye height matches yours, and the thighs, shins,
@@ -36,6 +37,10 @@ Without NDMF the component shows an error, and any build of an avatar that has i
    The preview shows a temporary copy of the avatar. The avatar itself is only hidden, and the
    preview ends when you select something else, enter play mode or build.
 4. If limbs look too thin or too thick, adjust the **Thickness** sliders.
+5. To change the neck, set **Neck Length** (1 = as modelled, 0.7 = 30% shorter). The head keeps
+   its height: what the neck loses, the spine, chest and upper chest gain in proportion, so the
+   eyes and hips stay where they are and the view position does not move. The head itself is not
+   scaled, only moved. **Neck Thickness** works like the limb sliders.
 
 **Reset** in the component's ⋮ menu measures the avatar again, which overwrites your numbers.
 
@@ -44,3 +49,6 @@ Without NDMF the component shows an error, and any build of an avatar that has i
 - Left and right are measured on the left side and get the same changes.
 - The humanoid Avatar is rebuilt from the reshaped armature, so animations that place the hips
   use the new proportions. Turn off **Rebuild Humanoid Avatar** if that causes problems.
+- Neck length needs a Neck bone in the humanoid mapping, with the Head as its direct child. Bones
+  parented to the spine, chest or neck (shoulders, breasts, helpers) move with the longer torso but
+  their own skin is not stretched.

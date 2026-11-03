@@ -4,10 +4,12 @@ using VRC.SDKBase;
 
 namespace Red.Proportions
 {
-    // Reshapes the avatar's legs and arms at build time to the player's proportions
+    // Reshapes the avatar's legs, arms and neck at build time to the player's proportions
     // (Editor/ProportionAdjusterPlugin.cs), so the scene stays untouched. VRChat scales the
     // avatar so its eyes match the player's, so only ratios to eye height matter: the hips come
     // down until hip/eye matches, and the knee and arm segments are set to the player's ratios.
+    // The neck is a plain length factor; the torso takes up the difference so the head and hips
+    // keep their heights.
     // Bones are never scaled (SPS refuses scaled parents above a socket, and a non-uniformly
     // scaled bone shears its children): joints are moved along the limb, and the skin is
     // stretched by scaled leaf proxies, so length and thickness are independent.
@@ -35,6 +37,12 @@ namespace Red.Proportions
         [Range(0.5f, 1.5f)] public float upperArmThickness = 1f;
         [Range(0.5f, 1.5f)] public float forearmThickness = 1f;
 
+        [Header("Neck (1 = unchanged)")]
+        [Tooltip("Neck length factor. The head keeps its height: what the neck loses, the spine, chest and upper chest gain in proportion, so the hips and eyes stay where they are. Needs a Neck bone in the humanoid mapping.")]
+        [Range(0.3f, 1.5f)] public float neckLength = 1f;
+        [Tooltip("Neck thickness factor.")]
+        [Range(0.5f, 1.5f)] public float neckThickness = 1f;
+
         [Header("What to change")]
         [Tooltip("Move the hips and reshape thighs and shins to the hip and knee heights. Feet keep their size and stay on the floor; the view position moves with the hips.")]
         public bool adjustLegs = true;
@@ -47,6 +55,8 @@ namespace Red.Proportions
         public struct Measurements
         {
             public float eye, hip, knee, ankle, upperArm, forearm;
+            // Neck joint to head joint; 0 when the avatar has no Neck bone.
+            public float neck;
         }
 
         // False when the root lacks a descriptor, a humanoid Animator or one of the limb bones.
@@ -74,6 +84,7 @@ namespace Red.Proportions
             m.ankle = Height(HumanBodyBones.LeftFoot);
             m.upperArm = Length(HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm);
             m.forearm = Length(HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand);
+            m.neck = Bone(HumanBodyBones.Neck) ? Length(HumanBodyBones.Neck, HumanBodyBones.Head) : 0f;
             return true;
         }
 
