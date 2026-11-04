@@ -4,12 +4,11 @@ using VRC.SDKBase;
 
 namespace Red.Proportions
 {
-    // Reshapes the avatar's legs, arms and neck at build time to the player's proportions
-    // (Editor/ProportionAdjusterPlugin.cs), so the scene stays untouched. VRChat scales the
-    // avatar so its eyes match the player's, so only ratios to eye height matter: the hips come
-    // down until hip/eye matches, and the knee and arm segments are set to the player's ratios.
-    // The neck is a plain length factor; the torso takes up the difference so the head and hips
-    // keep their heights.
+    // Reshapes the avatar's legs, arms, torso and neck at build time to the player's measurements
+    // (Editor/ProportionAdjusterPlugin.cs), so the scene stays untouched. The hips, knees and arm
+    // segments go straight to the cm values, and the torso is stretched lengthwise until the eyes
+    // reach theirs. The head, hands and feet keep their size. The neck is a plain length factor,
+    // which the torso also balances.
     // Bones are never scaled (SPS refuses scaled parents above a socket, and a non-uniformly
     // scaled bone shears its children): joints are moved along the limb, and the skin is
     // stretched by scaled leaf proxies, so length and thickness are independent.
@@ -20,7 +19,7 @@ namespace Red.Proportions
         // 0 means not measured yet: the avatar's own measurements are filled in when the component
         // is added to an avatar, or when it is first inspected there (the prefab).
         [Header("Player measurements (cm, standing)")]
-        [Tooltip("Floor to eyes. With Scale To Measurements on, the whole avatar is scaled so its eyes end up at this height.")]
+        [Tooltip("Floor to eyes. The torso is stretched lengthwise so the eyes end up at this height; the head keeps its size.")]
         public float eyeHeightCm;
         [Tooltip("Floor to where the avatar's Hips bone should end up.")]
         public float hipHeightCm;
@@ -48,8 +47,8 @@ namespace Red.Proportions
         public bool adjustLegs = true;
         [Tooltip("Reshape upper arms and forearms to the arm lengths. Hands keep their size.")]
         public bool adjustArms = true;
-        [Tooltip("Scale the whole avatar evenly so the final measurements are the cm values above. Everything scales, including the head, torso, hands and feet. Off: only the proportions match, and the avatar stays near its modelled size.")]
-        public bool scaleToMeasurements = true;
+        [Tooltip("Stretch the spine to the neck lengthwise so the eyes end up at the eye height. Its thickness doesn't change. Off: the eyes just move with the hips.")]
+        public bool adjustTorso = true;
         [Tooltip("Rebuild the humanoid Avatar from the reshaped armature, so animations that place the hips (sitting, poses) use the new proportions.")]
         public bool rebuildHumanoidAvatar = true;
 

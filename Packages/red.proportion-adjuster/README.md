@@ -1,13 +1,14 @@
 # Proportion Adjuster
 
-Reshapes a VRChat avatar's legs and arms to your own proportions when the avatar is built, so in
+Reshapes a VRChat avatar's legs, arms and torso to your own measurements when the avatar is built, so in
 full-body tracking the feet meet your real floor, and can shorten or lengthen the neck. The scene
 is never changed.
 
-The hips move until hip height / eye height matches yours, and the thighs, shins, upper arms and
-forearms are resized to match your ratios. The whole avatar is then scaled evenly so the final
-measurements are the cm values you entered. Turn off **Scale To Measurements** to match only the
-proportions and keep the avatar near its modelled size.
+The hips, knees and arm segments go straight to the cm values you enter, and the torso is stretched
+lengthwise until the eyes reach theirs. Nothing gets thicker because of this, and the head, hands
+and feet keep their size. The avatar's own scale isn't changed, so a big difference from its
+modelled size means a lot of stretching: check it in the preview. Turn off **Adjust Torso** to let
+the eyes just move with the hips.
 
 Bones are never scaled. Joints are moved along the limb and the skin is stretched separately, so
 SPS sockets keep working, and length and thickness can be set independently. VRCFury clothing
@@ -47,8 +48,7 @@ size in cm for the measurements, and 1 for the sliders. The other inputs don't c
 inspector warns you if the combination doesn't work. **Reset** in the component's ⋮ menu measures
 the avatar again and overwrites all the measurements at once.
 
-The thickness and neck sliders are factors of the avatar as modelled, applied before the overall
-scale, so a neck at 1 still grows or shrinks with the rest of the avatar. The build logs the final
+The thickness and neck sliders are factors of the avatar as modelled. The build logs the final
 measurements it produced.
 
 ## Limits
@@ -56,6 +56,6 @@ measurements it produced.
 - Left and right are measured on the left side and get the same changes.
 - The humanoid Avatar is rebuilt from the reshaped armature, so animations that place the hips
   use the new proportions. Turn off **Rebuild Humanoid Avatar** if that causes problems.
-- Neck length needs a Neck bone in the humanoid mapping, with the Head as its direct child. Bones
-  parented to the spine, chest or neck (shoulders, breasts, helpers) move with the longer torso but
-  their own skin is not stretched.
+- Neck length needs a Neck bone in the humanoid mapping, with the Head as its direct child.
+- Bones parented to the spine, chest or neck (shoulders, breasts, helpers) move with the torso but
+  their own skin is not stretched, which can show when the torso changes a lot.
