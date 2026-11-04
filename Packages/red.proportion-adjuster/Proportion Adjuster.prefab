@@ -55,6 +55,9 @@ MonoBehaviour:
   forearmThickness: 1
   neckLength: 1
   neckThickness: 1
+  spineStretch: 1
+  chestStretch: 1
+  upperChestStretch: 1
   adjustLegs: 1
   adjustArms: 1
   adjustTorso: 1

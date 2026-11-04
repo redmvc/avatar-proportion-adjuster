@@ -48,6 +48,11 @@ size in cm for the measurements, and 1 for the sliders. The other inputs don't c
 inspector warns you if the combination doesn't work. **Reset** in the component's ⋮ menu measures
 the avatar again and overwrites all the measurements at once.
 
+The **Torso stretch** sliders decide how the torso's stretch is divided between the spine, chest and
+upper chest, for the ones the avatar has. At 1 they're all stretched by the same factor; higher takes
+more, and 0 keeps that bone's length. The total stays what the eye height needs, so the eyes don't
+move. The inspector shows what each bone gets in cm.
+
 The thickness and neck sliders are factors of the avatar as modelled. The build logs the final
 measurements it produced.
 

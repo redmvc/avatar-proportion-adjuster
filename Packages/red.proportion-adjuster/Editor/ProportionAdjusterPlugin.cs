@@ -15,10 +15,14 @@ namespace Red.Proportions
     {
         // The avatar as it is.
         public ProportionAdjuster.Measurements now;
-        // How far the hips come down, and each segment's length factor. torsoScale applies to
-        // every segment from the spine to the neck and balances the neck change. eyeGain is how
-        // far the torso raises the eyes.
-        public float delta, thighScale, shinScale, upperArmScale, forearmScale, neckScale, torsoScale, eyeGain;
+        // How far the hips come down, and each segment's length factor. The spine, chest and upper
+        // chest factors together balance the neck change and raise the eyes by eyeGain.
+        public float delta, thighScale, shinScale, upperArmScale, forearmScale, neckScale, spineScale, chestScale, upperChestScale, eyeGain;
+
+        public bool TorsoStretches => spineScale != 1f || chestScale != 1f || upperChestScale != 1f;
+
+        public float TorsoScale(HumanBodyBones bone) =>
+            bone == HumanBodyBones.Spine ? spineScale : bone == HumanBodyBones.Chest ? chestScale : upperChestScale;
 
         public float NewEye => now.eye - delta + eyeGain;
 
@@ -32,7 +36,7 @@ namespace Red.Proportions
             plan = default;
             if (!ProportionAdjuster.TryMeasure(root, out plan.now)) return "The avatar root needs a descriptor and a humanoid Animator with leg and arm bones.";
             var m = plan.now;
-            plan.thighScale = plan.shinScale = plan.upperArmScale = plan.forearmScale = plan.neckScale = plan.torsoScale = 1f;
+            plan.thighScale = plan.shinScale = plan.upperArmScale = plan.forearmScale = plan.neckScale = plan.spineScale = plan.chestScale = plan.upperChestScale = 1f;
 
             if (a.eyeHeightCm <= 0f) return "Eye height must be positive.";
             float Units(float cm) => cm / 100f / m.rootScale;
@@ -72,15 +76,26 @@ namespace Red.Proportions
             }
             if (headRise != 0f)
             {
-                // Stretching the spine-to-neck chain by one factor makes up the difference, measured
-                // along each bone's stretch axis, in root space.
-                float torsoRise = ProportionReshaper.TorsoChain(anim).Sum(seg => ProportionReshaper.AxisRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next)));
-                if (torsoRise < 0.01f) return "The spine to neck chain is too short to stretch.";
-                plan.torsoScale = 1f + headRise / torsoRise;
+                // The spine-to-neck chain makes up the difference, measured along each bone's stretch
+                // axis in root space. Each bone stretches by its slider times one common amount, so
+                // whatever the sliders say, the rises add up to headRise.
+                var chain = ProportionReshaper.TorsoChain(anim);
+                float Rise((HumanBodyBones bone, HumanBodyBones next) seg) => ProportionReshaper.AxisRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next));
+                float Weight(HumanBodyBones bone) => bone == HumanBodyBones.Spine ? a.spineStretch : bone == HumanBodyBones.Chest ? a.chestStretch : a.upperChestStretch;
+                float weighted = chain.Sum(seg => Weight(seg.bone) * Rise(seg));
+                if (weighted < 0.01f) return "The torso can't stretch: its bones are too short, or their Torso Stretch sliders are all 0.";
+                float amount = headRise / weighted;
+                foreach (var seg in chain)
+                {
+                    float factor = 1f + Weight(seg.bone) * amount;
+                    if (seg.bone == HumanBodyBones.Spine) plan.spineScale = factor;
+                    else if (seg.bone == HumanBodyBones.Chest) plan.chestScale = factor;
+                    else plan.upperChestScale = factor;
+                }
             }
 
-            var scales = new[] { plan.thighScale, plan.shinScale, plan.upperArmScale, plan.forearmScale, plan.neckScale, plan.torsoScale };
-            if (scales.Any(s => !(s > 0.3f && s < 3f))) return $"Lengths out of range (thigh {plan.thighScale:F3}, shin {plan.shinScale:F3}, upper arm {plan.upperArmScale:F3}, forearm {plan.forearmScale:F3}, neck {plan.neckScale:F3}, torso {plan.torsoScale:F3}).";
+            var scales = new[] { plan.thighScale, plan.shinScale, plan.upperArmScale, plan.forearmScale, plan.neckScale, plan.spineScale, plan.chestScale, plan.upperChestScale };
+            if (scales.Any(s => !(s > 0.3f && s < 3f))) return $"Lengths out of range (thigh {plan.thighScale:F3}, shin {plan.shinScale:F3}, upper arm {plan.upperArmScale:F3}, forearm {plan.forearmScale:F3}, neck {plan.neckScale:F3}, spine {plan.spineScale:F3}, chest {plan.chestScale:F3}, upper chest {plan.upperChestScale:F3}).";
             return null;
         }
     }
@@ -126,8 +141,8 @@ namespace Red.Proportions
             }
             if (!Mathf.Approximately(plan.neckScale, 1f))
                 segments.Add((HumanBodyBones.Neck, HumanBodyBones.Head, plan.neckScale, a.neckThickness, false));
-            if (!Mathf.Approximately(plan.torsoScale, 1f))
-                foreach (var seg in TorsoChain(anim)) segments.Add((seg.bone, seg.next, plan.torsoScale, 1f, false));
+            foreach (var seg in TorsoChain(anim))
+                if (!Mathf.Approximately(plan.TorsoScale(seg.bone), 1f)) segments.Add((seg.bone, seg.next, plan.TorsoScale(seg.bone), 1f, false));
 
             // Each segment's skin is stretched in the bone's own frame: `length` along the axis
             // pointing at the next joint, `thickness` across it. The bone's children (next joint,
@@ -189,7 +204,7 @@ namespace Red.Proportions
             summary = $"final cm: eye {Cm(f.eye):F1}, hips {Cm(f.hip):F1}, knee {Cm(f.knee):F1}, upper arm {Cm(f.upperArm):F1}, forearm {Cm(f.forearm):F1}, neck {Cm(f.neck):F1}; " +
                       $"hips {-plan.delta * f.rootScale * 100f:+0.0;-0.0} cm on {hips.Length} armatures, view Y {desc.ViewPosition.y:F4}; " +
                       $"length thigh x{plan.thighScale:F3}, shin x{plan.shinScale:F3}, upper arm x{plan.upperArmScale:F3}, forearm x{plan.forearmScale:F3}, " +
-                      $"neck x{plan.neckScale:F3}, torso x{plan.torsoScale:F3}; {proxies.Count} skin proxies on {rebound} meshes";
+                      $"neck x{plan.neckScale:F3}, spine x{plan.spineScale:F3}, chest x{plan.chestScale:F3}, upper chest x{plan.upperChestScale:F3}; {proxies.Count} skin proxies on {rebound} meshes";
             return null;
         }
 
@@ -370,6 +385,9 @@ namespace Red.Proportions
                 case nameof(ProportionAdjuster.forearmThickness):
                 case nameof(ProportionAdjuster.neckLength):
                 case nameof(ProportionAdjuster.neckThickness):
+                case nameof(ProportionAdjuster.spineStretch):
+                case nameof(ProportionAdjuster.chestStretch):
+                case nameof(ProportionAdjuster.upperChestStretch):
                     return 1f;
             }
             if (!root || !ProportionAdjuster.TryMeasure(root, out var m)) return null;
@@ -386,6 +404,16 @@ namespace Red.Proportions
             return null;
         }
 
+        // The torso sliders only show for the bones the avatar has.
+        static bool HasBoneFor(string field, Transform root)
+        {
+            var anim = root.GetComponent<Animator>();
+            if (!anim || !anim.isHuman) return true;
+            if (field == nameof(ProportionAdjuster.chestStretch)) return anim.GetBoneTransform(HumanBodyBones.Chest);
+            if (field == nameof(ProportionAdjuster.upperChestStretch)) return anim.GetBoneTransform(HumanBodyBones.UpperChest);
+            return true;
+        }
+
         // Everything but the Script field, with a reset button beside each number and slider.
         void DrawFields(Transform root)
         {
@@ -396,6 +424,7 @@ namespace Red.Proportions
             do
             {
                 if (prop.name == "m_Script") continue;
+                if (root && !HasBoneFor(prop.name, root)) continue;
                 if (prop.propertyType != SerializedPropertyType.Float)
                 {
                     EditorGUILayout.PropertyField(prop, true);
@@ -410,7 +439,8 @@ namespace Red.Proportions
                 EditorGUI.PropertyField(field, prop, true);
 
                 var value = AvatarValue(prop.name, root);
-                var tooltip = prop.name.EndsWith("Cm") ? "Back to the avatar's own measurement." : "Back to 1, the avatar's own.";
+                var tooltip = prop.name.EndsWith("Cm") ? "Back to the avatar's own measurement."
+                    : prop.name.EndsWith("Stretch") ? "Back to 1, an even stretch." : "Back to 1, the avatar's own.";
                 using (new EditorGUI.DisabledScope(!value.HasValue || Mathf.Abs(prop.floatValue - value.Value) < 0.001f))
                 {
                     if (GUI.Button(button, new GUIContent(icon, tooltip), EditorStyles.iconButton))
@@ -420,6 +450,23 @@ namespace Red.Proportions
                     }
                 }
             } while (prop.NextVisible(false));
+        }
+
+        // What each torso bone takes of the stretch.
+        static string TorsoRows(ProportionPlan p, Transform root)
+        {
+            if (!p.TorsoStretches) return "";
+            var anim = root.GetComponent<Animator>();
+            var rows = ProportionReshaper.TorsoChain(anim).Select(seg =>
+            {
+                float factor = p.TorsoScale(seg.bone);
+                float gain = (factor - 1f) * ProportionReshaper.AxisRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next));
+                return (seg.bone, factor, gain);
+            }).ToList();
+            float total = rows.Sum(r => r.gain);
+            string Row((HumanBodyBones bone, float factor, float gain) r) =>
+                $"  {r.bone} length x{r.factor:F3}, {p.FinalCm(r.gain):+0.0;-0.0} cm" + (total != 0f ? $" ({r.gain / total * 100f:F0}% of the stretch)" : "");
+            return string.Join("\n", rows.Select(Row));
         }
 
         public override void OnInspectorGUI()
@@ -466,7 +513,7 @@ namespace Red.Proportions
                 (adjuster.adjustLegs ? $"  Thigh {Shape(p.thighScale, adjuster.thighThickness)}\n  Shin {Shape(p.shinScale, adjuster.shinThickness)}\n" : "") +
                 (adjuster.adjustArms ? $"  Upper arm {Shape(p.upperArmScale, adjuster.upperArmThickness)}\n  Forearm {Shape(p.forearmScale, adjuster.forearmThickness)}\n" : "") +
                 (p.neckScale != 1f ? $"  Neck {Shape(p.neckScale, adjuster.neckThickness)}\n" : "") +
-                (p.torsoScale != 1f ? $"  Spine to neck length x{p.torsoScale:F3}, same thickness" : "");
+                TorsoRows(p, desc.transform);
             EditorGUILayout.HelpBox(text.TrimEnd('\n'), MessageType.Info);
         }
     }

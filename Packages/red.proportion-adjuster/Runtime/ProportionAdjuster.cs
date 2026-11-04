@@ -42,6 +42,14 @@ namespace Red.Proportions
         [Tooltip("Neck thickness factor.")]
         [Range(0.5f, 1.5f)] public float neckThickness = 1f;
 
+        [Header("Torso stretch (1 = even, 0 = keeps its length)")]
+        [Tooltip("How much of the torso's stretch the Spine bone takes, relative to the others. With all at 1 every bone is stretched by the same factor; higher takes more, and 0 keeps this bone's length. The total always adds up to what the eye height needs. The list below shows the result in cm.")]
+        [Range(0f, 5f)] public float spineStretch = 1f;
+        [Tooltip("How much of the torso's stretch the Chest bone takes, relative to the others. See Spine Stretch.")]
+        [Range(0f, 5f)] public float chestStretch = 1f;
+        [Tooltip("How much of the torso's stretch the Upper Chest bone takes, relative to the others. See Spine Stretch.")]
+        [Range(0f, 5f)] public float upperChestStretch = 1f;
+
         [Header("What to change")]
         [Tooltip("Move the hips and reshape thighs and shins to the hip and knee heights. Feet keep their size and stay on the floor; the view position moves with the hips.")]
         public bool adjustLegs = true;
