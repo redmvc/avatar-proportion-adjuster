@@ -26,8 +26,9 @@ Without NDMF the component shows an error, and any build of an avatar that has i
    proportions, so on its own it changes nothing.
 2. Measure yourself standing, in cm. All heights are from the floor:
    - **Eye height**: floor to your eyes. This only turns the other measurements into
-     proportions; the avatar keeps its overall size. To be your real height in game, use
-     VRChat's avatar scaling.
+     proportions. The avatar isn't scaled to this height, though shortening its legs does make
+     it shorter, because everything above the hips comes down with them. To set your height in
+     game, use VRChat's avatar scaling.
    - **Hip height**: floor to the hip joint, the bony bump on the side of your hip.
    - **Knee height**: floor to the knee joint, the gap at the side of your knee.
    - **Shoulder to elbow** and **elbow to wrist**: joint centre to joint centre.
@@ -42,7 +43,11 @@ Without NDMF the component shows an error, and any build of an avatar that has i
    eyes and hips stay where they are and the view position does not move. The head itself is not
    scaled, only moved. **Neck Thickness** works like the limb sliders.
 
-**Reset** in the component's ⋮ menu measures the avatar again, which overwrites your numbers.
+The round arrow next to an input takes just that input back to the avatar's own value: 1 for the
+sliders, and for the measurements, the avatar's proportion at the eye height you've entered. Eye
+height goes back to the avatar's real eye height, and the other measurements are read against it,
+so if you're resetting several, reset it first. **Reset** in the component's ⋮ menu measures the
+avatar again and overwrites all the measurements at once.
 
 ## Limits
 

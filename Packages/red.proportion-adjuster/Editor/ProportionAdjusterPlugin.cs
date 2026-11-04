@@ -337,17 +337,85 @@ namespace Red.Proportions
             if (adjuster.MeasureAvatar()) PrefabUtility.RecordPrefabInstancePropertyModifications(adjuster);
         }
 
+        // What an input's reset button sets it to, or null when there's nothing to set it from.
+        // Measurements only mean something relative to eye height, so they go back to the avatar's
+        // proportion at the eye height entered: the avatar's raw hip height next to the player's
+        // eye height would make the legs longer. With the avatar's own eye height, the two match.
+        internal static float? AvatarValue(string field, ProportionAdjuster a, Transform root)
+        {
+            switch (field)
+            {
+                case nameof(ProportionAdjuster.thighThickness):
+                case nameof(ProportionAdjuster.shinThickness):
+                case nameof(ProportionAdjuster.upperArmThickness):
+                case nameof(ProportionAdjuster.forearmThickness):
+                case nameof(ProportionAdjuster.neckLength):
+                case nameof(ProportionAdjuster.neckThickness):
+                    return 1f;
+            }
+            if (!root || !ProportionAdjuster.TryMeasure(root, out var m)) return null;
+
+            float eyeCm = a.IsMeasured ? a.eyeHeightCm : m.eye * 100f;
+            float Proportion(float metres) => Mathf.Round(metres / m.eye * eyeCm * 10f) / 10f;
+            switch (field)
+            {
+                case nameof(ProportionAdjuster.eyeHeightCm): return Mathf.Round(m.eye * 1000f) / 10f;
+                case nameof(ProportionAdjuster.hipHeightCm): return Proportion(m.hip);
+                case nameof(ProportionAdjuster.kneeHeightCm): return Proportion(m.knee);
+                case nameof(ProportionAdjuster.shoulderToElbowCm): return Proportion(m.upperArm);
+                case nameof(ProportionAdjuster.elbowToWristCm): return Proportion(m.forearm);
+            }
+            return null;
+        }
+
+        // Everything but the Script field, with a reset button beside each number and slider.
+        void DrawFields(ProportionAdjuster adjuster, Transform root)
+        {
+            const float buttonWidth = 20f;
+            var icon = EditorGUIUtility.IconContent("Refresh").image;
+            var prop = serializedObject.GetIterator();
+            prop.NextVisible(true);
+            do
+            {
+                if (prop.name == "m_Script") continue;
+                if (prop.propertyType != SerializedPropertyType.Float)
+                {
+                    EditorGUILayout.PropertyField(prop, true);
+                    continue;
+                }
+
+                // The height includes any header above the input, so the button sits on the last line.
+                var rect = EditorGUILayout.GetControlRect(true, EditorGUI.GetPropertyHeight(prop, true));
+                var field = rect;
+                field.width -= buttonWidth + 2f;
+                var button = new Rect(rect.xMax - buttonWidth, rect.yMax - EditorGUIUtility.singleLineHeight, buttonWidth, EditorGUIUtility.singleLineHeight);
+                EditorGUI.PropertyField(field, prop, true);
+
+                var value = AvatarValue(prop.name, adjuster, root);
+                var tooltip = !prop.name.EndsWith("Cm") ? "Back to 1, the avatar's own."
+                    : prop.name == nameof(ProportionAdjuster.eyeHeightCm) ? "Back to the avatar's eye height. The other measurements are read against this one, so if you're resetting several, reset this first."
+                    : "Back to the avatar's own proportion, at the eye height above.";
+                using (new EditorGUI.DisabledScope(!value.HasValue || Mathf.Abs(prop.floatValue - value.Value) < 0.001f))
+                {
+                    if (GUI.Button(button, new GUIContent(icon, tooltip), EditorStyles.iconButton))
+                    {
+                        prop.floatValue = value.Value;
+                        GUI.changed = true;
+                    }
+                }
+            } while (prop.NextVisible(false));
+        }
+
         public override void OnInspectorGUI()
         {
-            // Everything but the Script field.
+            var adjuster = (ProportionAdjuster)target;
+            var desc = adjuster.GetComponentInParent<VRCAvatarDescriptor>();
             serializedObject.Update();
             EditorGUI.BeginChangeCheck();
-            DrawPropertiesExcluding(serializedObject, "m_Script");
+            DrawFields(adjuster, desc ? desc.transform : null);
             bool changed = EditorGUI.EndChangeCheck();
             serializedObject.ApplyModifiedProperties();
 
-            var adjuster = (ProportionAdjuster)target;
-            var desc = adjuster.GetComponentInParent<VRCAvatarDescriptor>();
             if (!desc) { EditorGUILayout.HelpBox("Put this on (or under) an avatar root.", MessageType.Warning); return; }
 
             bool previewing = ProportionPreview.IsShowing(adjuster);
