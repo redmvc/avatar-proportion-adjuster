@@ -43,11 +43,10 @@ Without NDMF the component shows an error, and any build of an avatar that has i
    eyes and hips stay where they are and the view position does not move. The head itself is not
    scaled, only moved. **Neck Thickness** works like the limb sliders.
 
-The round arrow next to an input takes just that input back to the avatar's own value: 1 for the
-sliders, and for the measurements, the avatar's proportion at the eye height you've entered. Eye
-height goes back to the avatar's real eye height, and the other measurements are read against it,
-so if you're resetting several, reset it first. **Reset** in the component's ⋮ menu measures the
-avatar again and overwrites all the measurements at once.
+The round arrow next to an input takes just that input back to the avatar's own value: its measured
+size in cm for the measurements, and 1 for the sliders. The other inputs don't change, and the
+inspector warns you if the combination doesn't work. **Reset** in the component's ⋮ menu measures
+the avatar again and overwrites all the measurements at once.
 
 ## Limits
 

@@ -1,7 +1,7 @@
 {
   "name": "red.proportion-adjuster",
   "displayName": "Proportion Adjuster",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "unity": "2022.3",
   "description": "Non-destructively reshapes a VRChat avatar's legs, arms and neck at build time: legs and arms to the player's own proportions, so full-body tracking puts the feet on the real floor; the neck by a length factor, balanced by the torso. SPS-safe: bones are never scaled.",
   "author": {

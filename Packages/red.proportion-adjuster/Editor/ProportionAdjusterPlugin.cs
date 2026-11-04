@@ -338,10 +338,8 @@ namespace Red.Proportions
         }
 
         // What an input's reset button sets it to, or null when there's nothing to set it from.
-        // Measurements only mean something relative to eye height, so they go back to the avatar's
-        // proportion at the eye height entered: the avatar's raw hip height next to the player's
-        // eye height would make the legs longer. With the avatar's own eye height, the two match.
-        internal static float? AvatarValue(string field, ProportionAdjuster a, Transform root)
+        // Each input is independent; the plan's error covers combinations that don't work.
+        internal static float? AvatarValue(string field, Transform root)
         {
             switch (field)
             {
@@ -355,21 +353,20 @@ namespace Red.Proportions
             }
             if (!root || !ProportionAdjuster.TryMeasure(root, out var m)) return null;
 
-            float eyeCm = a.IsMeasured ? a.eyeHeightCm : m.eye * 100f;
-            float Proportion(float metres) => Mathf.Round(metres / m.eye * eyeCm * 10f) / 10f;
+            float Cm(float metres) => Mathf.Round(metres * 1000f) / 10f;
             switch (field)
             {
-                case nameof(ProportionAdjuster.eyeHeightCm): return Mathf.Round(m.eye * 1000f) / 10f;
-                case nameof(ProportionAdjuster.hipHeightCm): return Proportion(m.hip);
-                case nameof(ProportionAdjuster.kneeHeightCm): return Proportion(m.knee);
-                case nameof(ProportionAdjuster.shoulderToElbowCm): return Proportion(m.upperArm);
-                case nameof(ProportionAdjuster.elbowToWristCm): return Proportion(m.forearm);
+                case nameof(ProportionAdjuster.eyeHeightCm): return Cm(m.eye);
+                case nameof(ProportionAdjuster.hipHeightCm): return Cm(m.hip);
+                case nameof(ProportionAdjuster.kneeHeightCm): return Cm(m.knee);
+                case nameof(ProportionAdjuster.shoulderToElbowCm): return Cm(m.upperArm);
+                case nameof(ProportionAdjuster.elbowToWristCm): return Cm(m.forearm);
             }
             return null;
         }
 
         // Everything but the Script field, with a reset button beside each number and slider.
-        void DrawFields(ProportionAdjuster adjuster, Transform root)
+        void DrawFields(Transform root)
         {
             const float buttonWidth = 20f;
             var icon = EditorGUIUtility.IconContent("Refresh").image;
@@ -391,10 +388,8 @@ namespace Red.Proportions
                 var button = new Rect(rect.xMax - buttonWidth, rect.yMax - EditorGUIUtility.singleLineHeight, buttonWidth, EditorGUIUtility.singleLineHeight);
                 EditorGUI.PropertyField(field, prop, true);
 
-                var value = AvatarValue(prop.name, adjuster, root);
-                var tooltip = !prop.name.EndsWith("Cm") ? "Back to 1, the avatar's own."
-                    : prop.name == nameof(ProportionAdjuster.eyeHeightCm) ? "Back to the avatar's eye height. The other measurements are read against this one, so if you're resetting several, reset this first."
-                    : "Back to the avatar's own proportion, at the eye height above.";
+                var value = AvatarValue(prop.name, root);
+                var tooltip = prop.name.EndsWith("Cm") ? "Back to the avatar's own measurement." : "Back to 1, the avatar's own.";
                 using (new EditorGUI.DisabledScope(!value.HasValue || Mathf.Abs(prop.floatValue - value.Value) < 0.001f))
                 {
                     if (GUI.Button(button, new GUIContent(icon, tooltip), EditorStyles.iconButton))
@@ -412,7 +407,7 @@ namespace Red.Proportions
             var desc = adjuster.GetComponentInParent<VRCAvatarDescriptor>();
             serializedObject.Update();
             EditorGUI.BeginChangeCheck();
-            DrawFields(adjuster, desc ? desc.transform : null);
+            DrawFields(desc ? desc.transform : null);
             bool changed = EditorGUI.EndChangeCheck();
             serializedObject.ApplyModifiedProperties();
 
