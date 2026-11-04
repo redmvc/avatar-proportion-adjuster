@@ -16,10 +16,15 @@ namespace Red.Proportions
         // The avatar as it is.
         public ProportionAdjuster.Measurements now;
         // How far the hips come down, and each segment's length factor. torsoScale applies to
-        // every segment from the spine to the neck and balances the neck change.
-        public float delta, thighScale, shinScale, upperArmScale, forearmScale, neckScale, torsoScale;
+        // every segment from the spine to the neck and balances the neck change. scale is what
+        // the whole avatar is then multiplied by.
+        public float delta, thighScale, shinScale, upperArmScale, forearmScale, neckScale, torsoScale, scale;
 
         public float NewEye => now.eye - delta;
+
+        // Real size in cm, once everything has been applied, of a length in root units.
+        public float FinalCm(float units) => units * now.rootScale * scale * 100f;
+        public float FinalKnee => now.ankle + (now.knee - now.ankle) * shinScale;
 
         // Returns an error message, or null when the plan is usable.
         public static string Compute(ProportionAdjuster a, Transform root, out ProportionPlan plan)
@@ -27,7 +32,7 @@ namespace Red.Proportions
             plan = default;
             if (!ProportionAdjuster.TryMeasure(root, out plan.now)) return "The avatar root needs a descriptor and a humanoid Animator with leg and arm bones.";
             var m = plan.now;
-            plan.thighScale = plan.shinScale = plan.upperArmScale = plan.forearmScale = plan.neckScale = plan.torsoScale = 1f;
+            plan.thighScale = plan.shinScale = plan.upperArmScale = plan.forearmScale = plan.neckScale = plan.torsoScale = plan.scale = 1f;
 
             if (a.eyeHeightCm <= 0f) return "Eye height must be positive.";
             if (a.adjustLegs)
@@ -39,7 +44,7 @@ namespace Red.Proportions
                 plan.delta = (m.hip - hipRatio * m.eye) / (1f - hipRatio);
                 float newKnee = kneeRatio * plan.NewEye;
                 if (newKnee <= m.ankle) return "The knee would end up below the ankle.";
-                plan.thighScale = (m.hip - plan.delta - newKnee) / (m.hip - m.knee);
+                plan.thighScale = (m.thigh - plan.delta - newKnee) / (m.thigh - m.knee);
                 plan.shinScale = (newKnee - m.ankle) / (m.knee - m.ankle);
             }
             if (a.adjustArms)
@@ -61,6 +66,14 @@ namespace Red.Proportions
                 float torsoRise = ProportionReshaper.TorsoChain(anim).Sum(seg => ProportionReshaper.AxisRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next)));
                 if (torsoRise < 0.01f) return "The spine to neck chain is too short to balance the neck.";
                 plan.torsoScale = 1f + headDrop / torsoRise;
+            }
+
+            if (plan.NewEye <= 0f) return "The eyes would end up below the floor.";
+            if (a.scaleToMeasurements)
+            {
+                plan.scale = a.eyeHeightCm / 100f / (plan.NewEye * m.rootScale);
+                // Rounding in the measurements alone shouldn't scale an untouched avatar.
+                if (Mathf.Abs(plan.scale - 1f) < 0.0005f) plan.scale = 1f;
             }
 
             var scales = new[] { plan.thighScale, plan.shinScale, plan.upperArmScale, plan.forearmScale, plan.neckScale, plan.torsoScale };
@@ -140,7 +153,8 @@ namespace Red.Proportions
 
             // The view point follows the head: down with the hips, and back up by the torso when the
             // neck changes (a slanted torso can also shift it slightly forward or back).
-            root.GetComponent<VRCAvatarDescriptor>().ViewPosition += root.InverseTransformPoint(head.position) - headBefore;
+            var desc = root.GetComponent<VRCAvatarDescriptor>();
+            desc.ViewPosition += root.TransformVector(root.InverseTransformPoint(head.position) - headBefore);
             beforeSkin?.Invoke(anim);
 
             // A leaf child at the bone's origin, scaled, takes over the bone's skin weights. Its
@@ -168,7 +182,16 @@ namespace Red.Proportions
             }
             proxiesOut?.AddRange(proxies.Values);
 
-            summary = $"hips {-plan.delta * 100f:+0.0;-0.0} cm on {hips.Length} armatures, view Y {plan.NewEye:F4}; " +
+            // Last, so the rebuilt Avatar keeps the armature's own units. Even scaling is fine for
+            // SPS, and the feet stay on the floor as it scales about the root.
+            root.localScale *= plan.scale;
+            desc.ViewPosition *= plan.scale;
+
+            ProportionAdjuster.TryMeasure(root, out var f);
+            float Cm(float units) => units * f.rootScale * 100f;
+            summary = $"final cm: eye {Cm(f.eye):F1}, hips {Cm(f.hip):F1}, knee {Cm(f.knee):F1}, upper arm {Cm(f.upperArm):F1}, forearm {Cm(f.forearm):F1}, neck {Cm(f.neck):F1}; " +
+                      $"whole avatar x{plan.scale:F4}; " +
+                      $"hips {-plan.delta * 100f:+0.0;-0.0} cm before scaling on {hips.Length} armatures, view Y {desc.ViewPosition.y:F4}; " +
                       $"length thigh x{plan.thighScale:F3}, shin x{plan.shinScale:F3}, upper arm x{plan.upperArmScale:F3}, forearm x{plan.forearmScale:F3}, " +
                       $"neck x{plan.neckScale:F3}, torso x{plan.torsoScale:F3}; {proxies.Count} skin proxies on {rebound} meshes";
             return null;
@@ -353,7 +376,7 @@ namespace Red.Proportions
             }
             if (!root || !ProportionAdjuster.TryMeasure(root, out var m)) return null;
 
-            float Cm(float metres) => Mathf.Round(metres * 1000f) / 10f;
+            float Cm(float units) => Mathf.Round(units * m.rootScale * 1000f) / 10f;
             switch (field)
             {
                 case nameof(ProportionAdjuster.eyeHeightCm): return Cm(m.eye);
@@ -438,10 +461,12 @@ namespace Red.Proportions
                 "Ratios to eye height (avatar now -> you):\n" +
                 $"  Hip {Ratio(m.hip / m.eye, adjuster.hipHeightCm / e)}, knee {Ratio(m.knee / m.eye, adjuster.kneeHeightCm / e)}\n" +
                 $"  Upper arm {Ratio(m.upperArm / m.eye, adjuster.shoulderToElbowCm / e)}, forearm {Ratio(m.forearm / m.eye, adjuster.elbowToWristCm / e)}\n\n" +
-                $"Build will: hips {-p.delta * 100f:+0.0;-0.0} cm, view Y {m.eye:F3} -> {p.NewEye:F3} m\n" +
+                $"Final cm: eye {p.FinalCm(p.NewEye):F1}, hips {p.FinalCm(m.hip - p.delta):F1}, knee {p.FinalCm(p.FinalKnee):F1}\n" +
+                $"  Upper arm {p.FinalCm(m.upperArm * p.upperArmScale):F1}, forearm {p.FinalCm(m.forearm * p.forearmScale):F1}, neck {p.FinalCm(m.neck * p.neckScale):F1}\n\n" +
+                $"Build will: hips {-p.delta * 100f:+0.0;-0.0} cm, then scale the whole avatar x{p.scale:F3}\n" +
                 (adjuster.adjustLegs ? $"  Thigh {Shape(p.thighScale, adjuster.thighThickness)}\n  Shin {Shape(p.shinScale, adjuster.shinThickness)}\n" : "") +
                 (adjuster.adjustArms ? $"  Upper arm {Shape(p.upperArmScale, adjuster.upperArmThickness)}\n  Forearm {Shape(p.forearmScale, adjuster.forearmThickness)}\n" : "") +
-                (p.neckScale != 1f ? $"  Neck {Shape(p.neckScale, adjuster.neckThickness)}: {m.neck * 100f:F1} -> {m.neck * p.neckScale * 100f:F1} cm\n  Spine to neck length x{p.torsoScale:F3} to keep the head height" : "");
+                (p.neckScale != 1f ? $"  Neck {Shape(p.neckScale, adjuster.neckThickness)}: {m.neck * m.rootScale * 100f:F1} -> {p.FinalCm(m.neck * p.neckScale):F1} cm\n  Spine to neck length x{p.torsoScale:F3} to keep the head height" : "");
             EditorGUILayout.HelpBox(text.TrimEnd('\n'), MessageType.Info);
         }
     }

@@ -20,9 +20,9 @@ namespace Red.Proportions
         // 0 means not measured yet: the avatar's own measurements are filled in when the component
         // is added to an avatar, or when it is first inspected there (the prefab).
         [Header("Player measurements (cm, standing)")]
-        [Tooltip("Floor to eyes. Only used to turn the other measurements into proportions: the avatar isn't scaled to this height, though shortening its legs does make it shorter. To set your height in game, use VRChat's avatar scaling.")]
+        [Tooltip("Floor to eyes. With Scale To Measurements on, the whole avatar is scaled so its eyes end up at this height.")]
         public float eyeHeightCm;
-        [Tooltip("Floor to the hip joint (the bony bump on the side of the hip).")]
+        [Tooltip("Floor to where the avatar's Hips bone should end up.")]
         public float hipHeightCm;
         [Tooltip("Floor to the knee joint (the gap at the side of the knee).")]
         public float kneeHeightCm;
@@ -48,15 +48,20 @@ namespace Red.Proportions
         public bool adjustLegs = true;
         [Tooltip("Reshape upper arms and forearms to the arm lengths. Hands keep their size.")]
         public bool adjustArms = true;
+        [Tooltip("Scale the whole avatar evenly so the final measurements are the cm values above. Everything scales, including the head, torso, hands and feet. Off: only the proportions match, and the avatar stays near its modelled size.")]
+        public bool scaleToMeasurements = true;
         [Tooltip("Rebuild the humanoid Avatar from the reshaped armature, so animations that place the hips (sitting, poses) use the new proportions.")]
         public bool rebuildHumanoidAvatar = true;
 
-        // The avatar's own proportions, in metres in avatar root space, measured on the left side.
+        // The avatar's own proportions in avatar root units, measured on the left side. Multiply
+        // by rootScale for real size.
         public struct Measurements
         {
-            public float eye, hip, knee, ankle, upperArm, forearm;
+            // hip is the Hips bone; thigh is the top of the thigh, usually several cm below it.
+            public float eye, hip, thigh, knee, ankle, upperArm, forearm;
             // Neck joint to head joint; 0 when the avatar has no Neck bone.
             public float neck;
+            public float rootScale;
         }
 
         // False when the root lacks a descriptor, a humanoid Animator or one of the limb bones.
@@ -69,17 +74,20 @@ namespace Red.Proportions
 
             var limbBones = new[]
             {
-                HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot,
+                HumanBodyBones.Hips, HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot,
                 HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.LeftHand,
             };
             foreach (var b in limbBones) if (!anim.GetBoneTransform(b)) return false;
 
             Transform Bone(HumanBodyBones b) => anim.GetBoneTransform(b);
             float Height(HumanBodyBones b) => root.InverseTransformPoint(Bone(b).position).y;
-            float Length(HumanBodyBones from, HumanBodyBones to) => Vector3.Distance(Bone(from).position, Bone(to).position);
+            float Length(HumanBodyBones from, HumanBodyBones to) => root.InverseTransformVector(Bone(to).position - Bone(from).position).magnitude;
 
-            m.eye = desc.ViewPosition.y;
-            m.hip = Height(HumanBodyBones.LeftUpperLeg);
+            // The view position is stored at real size, not in root units.
+            m.rootScale = root.lossyScale.y;
+            m.eye = root.InverseTransformVector(desc.ViewPosition).y;
+            m.hip = Height(HumanBodyBones.Hips);
+            m.thigh = Height(HumanBodyBones.LeftUpperLeg);
             m.knee = Height(HumanBodyBones.LeftLowerLeg);
             m.ankle = Height(HumanBodyBones.LeftFoot);
             m.upperArm = Length(HumanBodyBones.LeftUpperArm, HumanBodyBones.LeftLowerArm);
@@ -101,7 +109,7 @@ namespace Red.Proportions
             var desc = GetComponentInParent<VRCAvatarDescriptor>();
             if (!desc || !TryMeasure(desc.transform, out var m)) return false;
 
-            float Cm(float metres) => Mathf.Round(metres * 1000f) / 10f;
+            float Cm(float units) => Mathf.Round(units * m.rootScale * 1000f) / 10f;
             eyeHeightCm = Cm(m.eye);
             hipHeightCm = Cm(m.hip);
             kneeHeightCm = Cm(m.knee);

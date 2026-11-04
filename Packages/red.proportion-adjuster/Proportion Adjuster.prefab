@@ -57,4 +57,5 @@ MonoBehaviour:
   neckThickness: 1
   adjustLegs: 1
   adjustArms: 1
+  scaleToMeasurements: 1
   rebuildHumanoidAvatar: 1
