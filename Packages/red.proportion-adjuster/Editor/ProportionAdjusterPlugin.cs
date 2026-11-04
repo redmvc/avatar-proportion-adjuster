@@ -247,13 +247,29 @@ namespace Red.Proportions
                     var avatar = BuildAvatarFromScene(anim);
                     if (!avatar) return;
                     ctx.AssetSaver.SaveAsset(avatar);
-                    anim.avatar = avatar;
+                    SetAvatarKeepingPose(anim, avatar);
                 }, null, out var summary);
 
                 if (error != null) Debug.LogError($"Proportion Adjuster: {error} Skipped.", root);
                 else Debug.Log($"Proportion Adjuster: {summary}", root);
                 Remove(adjuster);
             });
+        }
+
+        // Assigning an Avatar makes the Animator rebind, which also puts its humanoid bones back
+        // where they were at the start of the frame: in a build, before the reshape. The binding
+        // is what's wanted, so the pose is restored afterwards, as Modular Avatar's own rebind
+        // does. The preview never assigns an Avatar, so it never showed this.
+        static void SetAvatarKeepingPose(Animator anim, Avatar avatar)
+        {
+            var pose = anim.GetComponentsInChildren<Transform>(true)
+                .Select(t => (t, t.localPosition, t.localRotation, t.localScale)).ToList();
+            anim.avatar = avatar;
+            foreach (var (t, position, rotation, scale) in pose)
+            {
+                t.SetLocalPositionAndRotation(position, rotation);
+                t.localScale = scale;
+            }
         }
 
         // The avatar root holds several armatures with the same bone names (VRCFury link
