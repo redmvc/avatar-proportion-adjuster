@@ -49,8 +49,11 @@ the avatar again and overwrites all the measurements at once.
 
 The **Torso stretch** sliders decide how the torso's stretch is divided between the spine, chest and
 upper chest, for the ones the avatar has. At 1 they're all stretched by the same factor; higher takes
-more, and 0 keeps that bone's length. The total stays what the eye height needs, so the eyes don't
-move. The inspector shows what each bone gets in cm.
+more, and 0 keeps that bone's length. **Hips Stretch** adds the gap from the Hips bone to the Spine
+bone to the mix. It starts at 0, and it only moves the spine up: the pelvis and legs stay where they
+are, and the belly stretches through its existing weights instead of scaled skin. It's unavailable if
+the Spine bone isn't a direct child of the Hips, or isn't above them. The total stays what the eye height needs, so the
+eyes don't move. The inspector shows what each part gets in cm.
 
 The thickness and neck sliders are factors applied on top of the overall scale, so a neck at 1 is
 the modelled neck at the new size. The build logs the final

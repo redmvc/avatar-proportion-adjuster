@@ -43,6 +43,8 @@ namespace Red.Proportions
         [Range(0.5f, 1.5f)] public float neckThickness = 1f;
 
         [Header("Torso stretch (1 = even, 0 = keeps its length)")]
+        [Tooltip("How much of the torso's stretch the gap from the Hips bone to the Spine bone takes, relative to the others. Starts at 0, which keeps its length. Only the spine and everything above it move: the pelvis and legs stay put, and the belly stretches through its existing weights.")]
+        [Range(0f, 5f)] public float hipsStretch = 0f;
         [Tooltip("How much of the torso's stretch the Spine bone takes, relative to the others. With all at 1 every bone is stretched by the same factor; higher takes more, and 0 keeps this bone's length. The total always adds up to what the eye height needs. The list below shows the result in cm.")]
         [Range(0f, 5f)] public float spineStretch = 1f;
         [Tooltip("How much of the torso's stretch the Chest bone takes, relative to the others. See Spine Stretch.")]
