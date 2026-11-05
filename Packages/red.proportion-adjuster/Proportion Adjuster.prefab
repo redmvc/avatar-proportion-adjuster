@@ -53,6 +53,7 @@ MonoBehaviour:
   shinThickness: 1
   upperArmThickness: 1
   forearmThickness: 1
+  torsoThickness: 1
   neckLength: 1
   neckThickness: 1
   hipsStretch: 0

@@ -36,7 +36,9 @@ Without NDMF the component shows an error, and any build of an avatar that has i
 3. The inspector lists the final measurements. Check them, or click **Preview** to see the result in the Scene view.
    The preview shows a temporary copy of the avatar. The avatar itself is only hidden, and the
    preview ends when you select something else, enter play mode or build.
-4. If limbs look too thin or too thick, adjust the **Thickness** sliders.
+4. If limbs or the torso look too thin or too thick, adjust the **Thickness** sliders. **Torso
+   Thickness** also moves the shoulders out with the chest, so it widens the shoulders. Skin weighted
+   to the Hips bone doesn't change, so the belly blends into it.
 5. To change the neck, set **Neck Length** (1 = as modelled, 0.7 = 30% shorter). The head keeps
    its height: what the neck loses, the spine, chest and upper chest gain in proportion, so the
    eyes and hips stay where they are and the view position does not move. The head itself is not

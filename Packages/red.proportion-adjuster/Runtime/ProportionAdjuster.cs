@@ -35,6 +35,8 @@ namespace Red.Proportions
         [Range(0.5f, 1.5f)] public float shinThickness = 1f;
         [Range(0.5f, 1.5f)] public float upperArmThickness = 1f;
         [Range(0.5f, 1.5f)] public float forearmThickness = 1f;
+        [Tooltip("Width and depth of the spine, chest and upper chest, including the shoulders' distance from the centre, so the arms stay attached. The skin weighted to the hips doesn't change, so the belly blends into it.")]
+        [Range(0.5f, 1.5f)] public float torsoThickness = 1f;
 
         [Header("Neck (1 = unchanged)")]
         [Tooltip("Neck length factor. The head keeps its height: what the neck loses, the spine, chest and upper chest gain in proportion, so the hips and eyes stay where they are. Needs a Neck bone in the humanoid mapping.")]

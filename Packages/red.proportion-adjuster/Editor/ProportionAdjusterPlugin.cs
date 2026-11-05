@@ -82,6 +82,10 @@ namespace Red.Proportions
                 // Rounding in the measurements alone shouldn't stretch an untouched avatar.
                 if (Mathf.Abs(plan.eyeGain) < 0.0015f) plan.eyeGain = 0f;
                 headRise += plan.eyeGain;
+                // A thicker torso also moves each next joint across its bone, which on a tilted spine
+                // shifts the head up or down.
+                headRise -= (a.torsoThickness - 1f) * ProportionReshaper.TorsoChain(anim).Where(seg => seg.bone != HumanBodyBones.Hips)
+                    .Sum(seg => ProportionReshaper.CrossRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next)));
             }
             if (headRise != 0f)
             {
@@ -152,7 +156,11 @@ namespace Red.Proportions
             if (!Mathf.Approximately(plan.neckScale, 1f))
                 segments.Add((HumanBodyBones.Neck, HumanBodyBones.Head, plan.neckScale, a.neckThickness, false));
             foreach (var seg in TorsoChain(anim))
-                if (!Mathf.Approximately(plan.TorsoScale(seg.bone), 1f)) segments.Add((seg.bone, seg.next, plan.TorsoScale(seg.bone), 1f, false));
+            {
+                float thickness = seg.bone == HumanBodyBones.Hips ? 1f : a.torsoThickness;
+                if (!Mathf.Approximately(plan.TorsoScale(seg.bone), 1f) || !Mathf.Approximately(thickness, 1f))
+                    segments.Add((seg.bone, seg.next, plan.TorsoScale(seg.bone), thickness, false));
+            }
 
             // Each segment's skin is stretched in the bone's own frame: `length` along the axis
             // pointing at the next joint, `thickness` across it. The bone's children (next joint,
@@ -260,6 +268,15 @@ namespace Red.Proportions
             var alongAxis = Vector3.zero;
             alongAxis[axis] = local[axis];
             return root.InverseTransformVector(bone.TransformVector(alongAxis)).y;
+        }
+
+        // How much the next joint rises in root space per unit of thickness: the rest of its offset,
+        // across the bone's stretch axis.
+        public static float CrossRise(Transform root, Transform bone, Transform next)
+        {
+            var across = bone.InverseTransformPoint(next.position);
+            across[DominantAxis(across)] = 0f;
+            return root.InverseTransformVector(bone.TransformVector(across)).y;
         }
 
         static int DominantAxis(Vector3 v)
@@ -413,6 +430,7 @@ namespace Red.Proportions
                 case nameof(ProportionAdjuster.shinThickness):
                 case nameof(ProportionAdjuster.upperArmThickness):
                 case nameof(ProportionAdjuster.forearmThickness):
+                case nameof(ProportionAdjuster.torsoThickness):
                 case nameof(ProportionAdjuster.neckLength):
                 case nameof(ProportionAdjuster.neckThickness):
                 case nameof(ProportionAdjuster.spineStretch):
@@ -487,9 +505,9 @@ namespace Red.Proportions
         }
 
         // What each torso bone takes of the stretch.
-        static string TorsoRows(ProportionPlan p, Transform root)
+        static string TorsoRows(ProportionPlan p, Transform root, float thickness)
         {
-            if (!p.TorsoStretches) return "";
+            if (!p.TorsoStretches && Mathf.Approximately(thickness, 1f)) return "";
             var anim = root.GetComponent<Animator>();
             var rows = ProportionReshaper.TorsoChain(anim).Select(seg =>
             {
@@ -500,7 +518,8 @@ namespace Red.Proportions
             float total = rows.Sum(r => r.gain);
             string Row((HumanBodyBones bone, float factor, float gain) r) =>
                 $"  {(r.bone == HumanBodyBones.Hips ? "Hips to spine" : r.bone.ToString())} length x{r.factor:F3}, {p.FinalCm(r.gain):+0.0;-0.0} cm" + (total != 0f ? $" ({r.gain / total * 100f:F0}% of the stretch)" : "");
-            return string.Join("\n", rows.Select(Row));
+            var text = string.Join("\n", rows.Select(Row));
+            return Mathf.Approximately(thickness, 1f) ? text : text + $"\n  Torso thickness x{thickness:F2}, shoulders moved out with it";
         }
 
         public override void OnInspectorGUI()
@@ -547,7 +566,7 @@ namespace Red.Proportions
                 (adjuster.adjustLegs ? $"  Thigh {Shape(p.thighScale, adjuster.thighThickness)}\n  Shin {Shape(p.shinScale, adjuster.shinThickness)}\n" : "") +
                 (adjuster.adjustArms ? $"  Upper arm {Shape(p.upperArmScale, adjuster.upperArmThickness)}\n  Forearm {Shape(p.forearmScale, adjuster.forearmThickness)}\n" : "") +
                 (p.neckScale != 1f ? $"  Neck {Shape(p.neckScale, adjuster.neckThickness)}\n" : "") +
-                TorsoRows(p, desc.transform);
+                TorsoRows(p, desc.transform, adjuster.torsoThickness);
             EditorGUILayout.HelpBox(text.TrimEnd('\n'), MessageType.Info);
         }
     }
