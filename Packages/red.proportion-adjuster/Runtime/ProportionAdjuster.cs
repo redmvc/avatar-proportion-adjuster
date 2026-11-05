@@ -4,11 +4,11 @@ using VRC.SDKBase;
 
 namespace Red.Proportions
 {
-    // Reshapes the avatar's legs, arms, torso and neck at build time to the player's measurements
-    // (Editor/ProportionAdjusterPlugin.cs), so the scene stays untouched. The hips, knees and arm
-    // segments go straight to the cm values, and the torso is stretched lengthwise until the eyes
-    // reach theirs. The head, hands and feet keep their size. The neck is a plain length factor,
-    // which the torso also balances.
+    // Reshapes the avatar at build time to the player's measurements
+    // (Editor/ProportionAdjusterPlugin.cs), so the scene stays untouched. The whole armature is
+    // scaled evenly until the eyes are at the eye height. At that size, the hips, knees and arm
+    // segments go straight to their cm values, and the torso is stretched lengthwise to keep the
+    // eyes where they are. The neck is a plain length factor, which the torso also balances.
     // Bones are never scaled (SPS refuses scaled parents above a socket, and a non-uniformly
     // scaled bone shears its children): joints are moved along the limb, and the skin is
     // stretched by scaled leaf proxies, so length and thickness are independent.
@@ -19,7 +19,7 @@ namespace Red.Proportions
         // 0 means not measured yet: the avatar's own measurements are filled in when the component
         // is added to an avatar, or when it is first inspected there (the prefab).
         [Header("Player measurements (cm, standing)")]
-        [Tooltip("Floor to eyes. The torso is stretched lengthwise so the eyes end up at this height; the head keeps its size.")]
+        [Tooltip("Floor to eyes. The whole armature is scaled evenly to this height first, and every other value is then applied at that size.")]
         public float eyeHeightCm;
         [Tooltip("Floor to where the avatar's Hips bone should end up.")]
         public float hipHeightCm;
@@ -55,7 +55,7 @@ namespace Red.Proportions
         public bool adjustLegs = true;
         [Tooltip("Reshape upper arms and forearms to the arm lengths. Hands keep their size.")]
         public bool adjustArms = true;
-        [Tooltip("Stretch the spine to the neck lengthwise so the eyes end up at the eye height. Its thickness doesn't change. Off: the eyes just move with the hips.")]
+        [Tooltip("Stretch the spine to the neck lengthwise so the eyes stay at the eye height when the hips move. Its thickness doesn't change. Off: the eyes move with the hips, so they end up away from the eye height.")]
         public bool adjustTorso = true;
         [Tooltip("Rebuild the humanoid Avatar from the reshaped armature, so animations that place the hips (sitting, poses) use the new proportions.")]
         public bool rebuildHumanoidAvatar = true;

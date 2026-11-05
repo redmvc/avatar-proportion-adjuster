@@ -4,11 +4,10 @@ Reshapes a VRChat avatar's legs, arms and torso to your own measurements when th
 full-body tracking the feet meet your real floor, and can shorten or lengthen the neck. The scene
 is never changed.
 
-The hips, knees and arm segments go straight to the cm values you enter, and the torso is stretched
-lengthwise until the eyes reach theirs. Nothing gets thicker because of this, and the head, hands
-and feet keep their size. The avatar's own scale isn't changed, so a big difference from its
-modelled size means a lot of stretching: check it in the preview. Turn off **Adjust Torso** to let
-the eyes just move with the hips.
+Eye height scales the whole armature evenly, head, hands and feet included, until the eyes are at
+the height you enter. At that size, the hips, knees and arm segments go straight to their cm values
+by stretching lengthwise, and the torso is stretched lengthwise to keep the eyes where they are.
+Turn off **Adjust Torso** to let the eyes move with the hips instead.
 
 Bones are never scaled. Joints are moved along the limb and the skin is stretched separately, so
 SPS sockets keep working, and length and thickness can be set independently. VRCFury clothing
@@ -53,7 +52,8 @@ upper chest, for the ones the avatar has. At 1 they're all stretched by the same
 more, and 0 keeps that bone's length. The total stays what the eye height needs, so the eyes don't
 move. The inspector shows what each bone gets in cm.
 
-The thickness and neck sliders are factors of the avatar as modelled. The build logs the final
+The thickness and neck sliders are factors applied on top of the overall scale, so a neck at 1 is
+the modelled neck at the new size. The build logs the final
 measurements it produced.
 
 ## Limits
