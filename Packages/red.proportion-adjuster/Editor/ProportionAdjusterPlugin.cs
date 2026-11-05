@@ -84,8 +84,8 @@ namespace Red.Proportions
                 headRise += plan.eyeGain;
                 // A thicker torso also moves each next joint across its bone, which on a tilted spine
                 // shifts the head up or down.
-                headRise -= (a.torsoThickness - 1f) * ProportionReshaper.TorsoChain(anim).Where(seg => seg.bone != HumanBodyBones.Hips)
-                    .Sum(seg => ProportionReshaper.CrossRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next)));
+                headRise -= ProportionReshaper.TorsoChain(anim).Where(seg => seg.bone != HumanBodyBones.Hips)
+                    .Sum(seg => (a.TorsoThickness(seg.bone) - 1f) * ProportionReshaper.CrossRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next)));
             }
             if (headRise != 0f)
             {
@@ -120,14 +120,20 @@ namespace Red.Proportions
     internal static class ProportionReshaper
     {
         // beforeSkin runs once the joints have moved but before the skin proxies exist. Created
-        // proxies are added to proxiesOut when given. Returns an error message, or null.
-        public static string Reshape(ProportionAdjuster a, Transform root, System.Action<Animator> beforeSkin, List<Transform> proxiesOut, out string summary)
+        // proxies and meshes are added to proxiesOut and meshesOut when given; the caller owns the
+        // meshes. Returns an error message, or null.
+        public static string Reshape(ProportionAdjuster a, Transform root, System.Action<Animator> beforeSkin, List<Transform> proxiesOut, List<Mesh> meshesOut, out string summary)
         {
             summary = null;
             var error = ProportionPlan.Compute(a, root, out var plan);
             if (error != null) return error;
 
             var anim = root.GetComponent<Animator>();
+            // First, as it reads the rest pose.
+            int bellyMeshes = 0;
+            if (!Mathf.Approximately(a.lowerBellyThickness, 1f) && HipsCanStretch(anim))
+                bellyMeshes = ThickenLowerBelly(root, anim, a.lowerBellyThickness, meshesOut);
+
             var all = root.GetComponentsInChildren<Transform>(true);
             Transform[] Named(HumanBodyBones b) => all.Where(t => t.name == anim.GetBoneTransform(b).name).ToArray();
 
@@ -157,7 +163,8 @@ namespace Red.Proportions
                 segments.Add((HumanBodyBones.Neck, HumanBodyBones.Head, plan.neckScale, a.neckThickness, false));
             foreach (var seg in TorsoChain(anim))
             {
-                float thickness = seg.bone == HumanBodyBones.Hips ? 1f : a.torsoThickness;
+                // The lower belly has no proxy; ThickenLowerBelly did it.
+                float thickness = seg.bone == HumanBodyBones.Hips ? 1f : a.TorsoThickness(seg.bone);
                 if (!Mathf.Approximately(plan.TorsoScale(seg.bone), 1f) || !Mathf.Approximately(thickness, 1f))
                     segments.Add((seg.bone, seg.next, plan.TorsoScale(seg.bone), thickness, false));
             }
@@ -232,8 +239,78 @@ namespace Red.Proportions
             summary = $"final cm: eye {Cm(f.eye):F1}, hips {Cm(f.hip):F1}, knee {Cm(f.knee):F1}, upper arm {Cm(f.upperArm):F1}, forearm {Cm(f.forearm):F1}, neck {Cm(f.neck):F1}; " +
                       $"whole armature x{plan.scale:F4}, then hips {-plan.delta * f.rootScale * 100f:+0.0;-0.0} cm on {hips.Length} armatures, view Y {desc.ViewPosition.y:F4}; " +
                       $"length thigh x{plan.thighScale:F3}, shin x{plan.shinScale:F3}, upper arm x{plan.upperArmScale:F3}, forearm x{plan.forearmScale:F3}, " +
-                      $"neck x{plan.neckScale:F3}, hips to spine x{plan.hipsScale:F3}, spine x{plan.spineScale:F3}, chest x{plan.chestScale:F3}, upper chest x{plan.upperChestScale:F3}; {proxies.Count} skin proxies on {rebound} meshes";
+                      $"neck x{plan.neckScale:F3}, hips to spine x{plan.hipsScale:F3}, spine x{plan.spineScale:F3}, chest x{plan.chestScale:F3}, upper chest x{plan.upperChestScale:F3}; {proxies.Count} skin proxies on {rebound} meshes; lower belly on {bellyMeshes} meshes";
             return null;
+        }
+
+        // The lower belly's skin hangs on the Hips and the bones between them and the thighs, which
+        // also carry the pelvis and genitals, so a scaled proxy would widen those too. Its rest shape
+        // is widened instead, in a copy of each mesh: by the share of each vertex's weight on those
+        // bones, so the Spine and Chest proxies keep their own share, and only above the top of the
+        // thighs, fading in up to the Hips bone. Every mesh gets the same offset for the same position
+        // and weights, so clothing stays over the skin and seams between meshes stay closed.
+        // Returns how many meshes changed.
+        static int ThickenLowerBelly(Transform root, Animator anim, float thickness, List<Mesh> meshesOut)
+        {
+            var hipsBone = anim.GetBoneTransform(HumanBodyBones.Hips);
+            var carriers = new HashSet<string> { hipsBone.name };
+            foreach (var leg in new[] { HumanBodyBones.LeftUpperLeg, HumanBodyBones.RightUpperLeg })
+                for (var t = anim.GetBoneTransform(leg).parent; t && t != hipsBone && t != root; t = t.parent)
+                    carriers.Add(t.name);
+
+            // In root units. The widening centres on the line from the Hips bone to the Spine bone.
+            var hips = root.InverseTransformPoint(hipsBone.position);
+            var spine = root.InverseTransformPoint(anim.GetBoneTransform(HumanBodyBones.Spine).position);
+            float thighTop = root.InverseTransformPoint(anim.GetBoneTransform(HumanBodyBones.LeftUpperLeg).position).y;
+            float fadeFrom = Mathf.Min(thighTop, hips.y - (spine.y - hips.y));
+
+            int changed = 0;
+            foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
+            {
+                var mesh = smr.sharedMesh;
+                if (!mesh) continue;
+                var bones = smr.bones;
+                var carries = bones.Select(b => b && carriers.Contains(b.name)).ToArray();
+                int first = System.Array.IndexOf(carries, true);
+                if (first < 0) continue;
+                if (!mesh.isReadable && Application.isPlaying)
+                {
+                    Debug.LogWarning($"Proportion Adjuster: {mesh.name} isn't readable in play mode, so Lower Belly Thickness skips it. Uploads aren't affected.", smr);
+                    continue;
+                }
+
+                var toRoot = root.worldToLocalMatrix * bones[first].localToWorldMatrix * mesh.bindposes[first];
+                var fromRoot = toRoot.inverse;
+                var vertices = mesh.vertices;
+                var counts = mesh.GetBonesPerVertex();
+                var weights = mesh.GetAllBoneWeights();
+                bool moved = false;
+                for (int v = 0, w = 0; v < counts.Length; w += counts[v], v++)
+                {
+                    float share = 0f;
+                    for (int k = 0; k < counts[v]; k++)
+                        if (carries[weights[w + k].boneIndex]) share += weights[w + k].weight;
+                    if (share <= 0f) continue;
+
+                    var point = toRoot.MultiplyPoint3x4(vertices[v]);
+                    float fade = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(fadeFrom, hips.y, point.y));
+                    if (fade <= 0f) continue;
+
+                    var across = point - Vector3.Lerp(hips, spine, Mathf.InverseLerp(hips.y, spine.y, point.y));
+                    across.y = 0f;
+                    vertices[v] += fromRoot.MultiplyVector(across * (share * fade * (thickness - 1f)));
+                    moved = true;
+                }
+                if (!moved) continue;
+
+                var copy = Object.Instantiate(mesh);
+                copy.name = mesh.name;
+                copy.vertices = vertices;
+                smr.sharedMesh = copy;
+                meshesOut?.Add(copy);
+                changed++;
+            }
+            return changed;
         }
 
         // The segments from the spine up to the neck, skipping the optional chest bones when the
@@ -323,6 +400,7 @@ namespace Red.Proportions
                 }
 
                 var root = ctx.AvatarRootTransform;
+                var meshes = new List<Mesh>();
                 // The humanoid Avatar is rebuilt before the proxies exist, so they stay out of its skeleton.
                 var error = ProportionReshaper.Reshape(adjuster, root, anim =>
                 {
@@ -331,7 +409,8 @@ namespace Red.Proportions
                     if (!avatar) return;
                     ctx.AssetSaver.SaveAsset(avatar);
                     SetAvatarKeepingPose(anim, avatar);
-                }, null, out var summary);
+                }, null, meshes, out var summary);
+                foreach (var mesh in meshes) ctx.AssetSaver.SaveAsset(mesh);
 
                 if (error != null) Debug.LogError($"Proportion Adjuster: {error} Skipped.", root);
                 else Debug.Log($"Proportion Adjuster: {summary}", root);
@@ -430,7 +509,10 @@ namespace Red.Proportions
                 case nameof(ProportionAdjuster.shinThickness):
                 case nameof(ProportionAdjuster.upperArmThickness):
                 case nameof(ProportionAdjuster.forearmThickness):
-                case nameof(ProportionAdjuster.torsoThickness):
+                case nameof(ProportionAdjuster.lowerBellyThickness):
+                case nameof(ProportionAdjuster.spineThickness):
+                case nameof(ProportionAdjuster.chestThickness):
+                case nameof(ProportionAdjuster.upperChestThickness):
                 case nameof(ProportionAdjuster.neckLength):
                 case nameof(ProportionAdjuster.neckThickness):
                 case nameof(ProportionAdjuster.spineStretch):
@@ -459,9 +541,9 @@ namespace Red.Proportions
         {
             var anim = root.GetComponent<Animator>();
             if (!anim || !anim.isHuman) return true;
-            if (field == nameof(ProportionAdjuster.hipsStretch)) return ProportionReshaper.HipsCanStretch(anim);
-            if (field == nameof(ProportionAdjuster.chestStretch)) return anim.GetBoneTransform(HumanBodyBones.Chest);
-            if (field == nameof(ProportionAdjuster.upperChestStretch)) return anim.GetBoneTransform(HumanBodyBones.UpperChest);
+            if (field == nameof(ProportionAdjuster.hipsStretch) || field == nameof(ProportionAdjuster.lowerBellyThickness)) return ProportionReshaper.HipsCanStretch(anim);
+            if (field == nameof(ProportionAdjuster.chestStretch) || field == nameof(ProportionAdjuster.chestThickness)) return anim.GetBoneTransform(HumanBodyBones.Chest);
+            if (field == nameof(ProportionAdjuster.upperChestStretch) || field == nameof(ProportionAdjuster.upperChestThickness)) return anim.GetBoneTransform(HumanBodyBones.UpperChest);
             return true;
         }
 
@@ -475,7 +557,17 @@ namespace Red.Proportions
             do
             {
                 if (prop.name == "m_Script") continue;
-                if (root && !HasBoneFor(prop.name, root)) continue;
+                if (root && !HasBoneFor(prop.name, root))
+                {
+                    // A header belongs to the field under it, so it has to be drawn for a hidden one.
+                    var header = typeof(ProportionAdjuster).GetField(prop.name)?.GetCustomAttributes(typeof(HeaderAttribute), false).FirstOrDefault() as HeaderAttribute;
+                    if (header != null)
+                    {
+                        EditorGUILayout.Space();
+                        EditorGUILayout.LabelField(header.header, EditorStyles.boldLabel);
+                    }
+                    continue;
+                }
                 if (prop.propertyType != SerializedPropertyType.Float)
                 {
                     EditorGUILayout.PropertyField(prop, true);
@@ -505,11 +597,12 @@ namespace Red.Proportions
         }
 
         // What each torso bone takes of the stretch.
-        static string TorsoRows(ProportionPlan p, Transform root, float thickness)
+        static string TorsoRows(ProportionPlan p, Transform root, ProportionAdjuster a)
         {
-            if (!p.TorsoStretches && Mathf.Approximately(thickness, 1f)) return "";
             var anim = root.GetComponent<Animator>();
-            var rows = ProportionReshaper.TorsoChain(anim).Select(seg =>
+            var chain = ProportionReshaper.TorsoChain(anim);
+            if (!p.TorsoStretches && chain.All(seg => Mathf.Approximately(a.TorsoThickness(seg.bone), 1f))) return "";
+            var rows = chain.Select(seg =>
             {
                 float factor = p.TorsoScale(seg.bone);
                 float gain = (factor - 1f) * ProportionReshaper.AxisRise(root, anim.GetBoneTransform(seg.bone), anim.GetBoneTransform(seg.next));
@@ -517,9 +610,9 @@ namespace Red.Proportions
             }).ToList();
             float total = rows.Sum(r => r.gain);
             string Row((HumanBodyBones bone, float factor, float gain) r) =>
-                $"  {(r.bone == HumanBodyBones.Hips ? "Hips to spine" : r.bone.ToString())} length x{r.factor:F3}, {p.FinalCm(r.gain):+0.0;-0.0} cm" + (total != 0f ? $" ({r.gain / total * 100f:F0}% of the stretch)" : "");
-            var text = string.Join("\n", rows.Select(Row));
-            return Mathf.Approximately(thickness, 1f) ? text : text + $"\n  Torso thickness x{thickness:F2}, shoulders moved out with it";
+                $"  {(r.bone == HumanBodyBones.Hips ? "Hips to spine" : r.bone.ToString())} length x{r.factor:F3}, {p.FinalCm(r.gain):+0.0;-0.0} cm" + (total != 0f ? $" ({r.gain / total * 100f:F0}% of the stretch)" : "") +
+                (Mathf.Approximately(a.TorsoThickness(r.bone), 1f) ? "" : $", thickness x{a.TorsoThickness(r.bone):F2}");
+            return string.Join("\n", rows.Select(Row));
         }
 
         public override void OnInspectorGUI()
@@ -566,7 +659,7 @@ namespace Red.Proportions
                 (adjuster.adjustLegs ? $"  Thigh {Shape(p.thighScale, adjuster.thighThickness)}\n  Shin {Shape(p.shinScale, adjuster.shinThickness)}\n" : "") +
                 (adjuster.adjustArms ? $"  Upper arm {Shape(p.upperArmScale, adjuster.upperArmThickness)}\n  Forearm {Shape(p.forearmScale, adjuster.forearmThickness)}\n" : "") +
                 (p.neckScale != 1f ? $"  Neck {Shape(p.neckScale, adjuster.neckThickness)}\n" : "") +
-                TorsoRows(p, desc.transform, adjuster.torsoThickness);
+                TorsoRows(p, desc.transform, adjuster);
             EditorGUILayout.HelpBox(text.TrimEnd('\n'), MessageType.Info);
         }
     }

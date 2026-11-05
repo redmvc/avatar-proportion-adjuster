@@ -35,8 +35,16 @@ namespace Red.Proportions
         [Range(0.5f, 1.5f)] public float shinThickness = 1f;
         [Range(0.5f, 1.5f)] public float upperArmThickness = 1f;
         [Range(0.5f, 1.5f)] public float forearmThickness = 1f;
-        [Tooltip("Width and depth of the spine, chest and upper chest, including the shoulders' distance from the centre, so the arms stay attached. The skin weighted to the hips doesn't change, so the belly blends into it.")]
-        [Range(0.5f, 1.5f)] public float torsoThickness = 1f;
+
+        [Header("Torso thickness (1 = unchanged)")]
+        [Tooltip("Width and depth of the belly from the Hips bone up to the Spine bone, clothing included. It fades out from the Hips bone down to the top of the thighs, so the pelvis, genitals and legs stay as they are. Blends into Spine Thickness above.")]
+        [Range(0.5f, 1.5f)] public float lowerBellyThickness = 1f;
+        [Tooltip("Width and depth of the skin on the Spine bone. If shoulders or other bones hang from it, they move out with it.")]
+        [Range(0.5f, 1.5f)] public float spineThickness = 1f;
+        [Tooltip("Width and depth of the skin on the Chest bone. If the shoulders hang from it, they move out with it, so the arms stay attached and the shoulders widen.")]
+        [Range(0.5f, 1.5f)] public float chestThickness = 1f;
+        [Tooltip("Width and depth of the skin on the Upper Chest bone. If the shoulders hang from it, they move out with it, so the arms stay attached and the shoulders widen.")]
+        [Range(0.5f, 1.5f)] public float upperChestThickness = 1f;
 
         [Header("Neck (1 = unchanged)")]
         [Tooltip("Neck length factor. The head keeps its height: what the neck loses, the spine, chest and upper chest gain in proportion, so the hips and eyes stay where they are. Needs a Neck bone in the humanoid mapping.")]
@@ -108,6 +116,10 @@ namespace Red.Proportions
         }
 
         public bool IsMeasured => eyeHeightCm > 0f;
+
+        // The thickness of a torso segment, named by the bone it starts from.
+        public float TorsoThickness(HumanBodyBones bone) =>
+            bone == HumanBodyBones.Hips ? lowerBellyThickness : bone == HumanBodyBones.Spine ? spineThickness : bone == HumanBodyBones.Chest ? chestThickness : upperChestThickness;
 
         // Unity calls this when the component is added (and on Reset in its context menu).
         void Reset() => MeasureAvatar();

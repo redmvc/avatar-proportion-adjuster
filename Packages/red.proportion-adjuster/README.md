@@ -36,9 +36,16 @@ Without NDMF the component shows an error, and any build of an avatar that has i
 3. The inspector lists the final measurements. Check them, or click **Preview** to see the result in the Scene view.
    The preview shows a temporary copy of the avatar. The avatar itself is only hidden, and the
    preview ends when you select something else, enter play mode or build.
-4. If limbs or the torso look too thin or too thick, adjust the **Thickness** sliders. **Torso
-   Thickness** also moves the shoulders out with the chest, so it widens the shoulders. Skin weighted
-   to the Hips bone doesn't change, so the belly blends into it.
+4. If limbs look too thin or too thick, adjust the **Thickness** sliders. The torso has its own
+   **Torso thickness** sliders, one per part, shown for the parts the avatar has:
+   - **Lower Belly**: the belly from the Hips bone up to the Spine bone, clothing included. It fades
+     out from the Hips bone down to the top of the thighs, so the pelvis, genitals and legs stay as
+     they are. It's unavailable if the Spine bone isn't a direct child of the Hips, or isn't above them.
+   - **Spine**, **Chest** and **Upper Chest**: the skin on that bone. Whichever one holds the shoulders
+     also moves them out, so the arms stay attached and the shoulders widen.
+
+   Each slider acts on its bone's share of the skin, so skin shared with other bones grows by less
+   than the number, and skin on shoulder and chest helper bones doesn't grow at all.
 5. To change the neck, set **Neck Length** (1 = as modelled, 0.7 = 30% shorter). The head keeps
    its height: what the neck loses, the spine, chest and upper chest gain in proportion, so the
    eyes and hips stay where they are and the view position does not move. The head itself is not
@@ -69,3 +76,6 @@ measurements it produced.
 - Neck length needs a Neck bone in the humanoid mapping, with the Head as its direct child.
 - Bones parented to the spine, chest or neck (shoulders, breasts, helpers) move with the torso but
   their own skin is not stretched, which can show when the torso changes a lot.
+- Lower Belly changes copies of the meshes at build time. Objects parented rigidly to the hips don't
+  move out with it, and in play mode it skips meshes imported without Read/Write. Uploads aren't affected
+  by that.

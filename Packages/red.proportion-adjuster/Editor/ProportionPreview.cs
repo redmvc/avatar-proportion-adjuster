@@ -22,6 +22,7 @@ namespace Red.Proportions
         // Objects under the avatar that were already hidden, so ending the preview doesn't show them.
         static List<GameObject> hiddenBefore;
         static readonly List<Transform> proxies = new List<Transform>();
+        static readonly List<Mesh> meshes = new List<Mesh>();
 
         static ProportionPreview()
         {
@@ -72,6 +73,7 @@ namespace Red.Proportions
 
             foreach (var p in proxies) if (p) Object.DestroyImmediate(p.gameObject);
             proxies.Clear();
+            DestroyMeshes();
             foreach (var (s, d) in transforms)
             {
                 d.localPosition = s.localPosition;
@@ -79,11 +81,15 @@ namespace Red.Proportions
                 d.localScale = s.localScale;
             }
             foreach (var (s, d) in renderers)
+            {
+                d.sharedMesh = s.sharedMesh;
                 d.bones = s.bones.Select(b => b && toCopy.TryGetValue(b, out var c) ? c : b).ToArray();
+            }
             copy.GetComponent<VRCAvatarDescriptor>().ViewPosition = original.GetComponent<VRCAvatarDescriptor>().ViewPosition;
 
-            var error = ProportionReshaper.Reshape(source, copy.transform, null, proxies, out _);
+            var error = ProportionReshaper.Reshape(source, copy.transform, null, proxies, meshes, out _);
             foreach (var p in proxies) p.gameObject.hideFlags = HideFlags.HideAndDontSave;
+            foreach (var m in meshes) m.hideFlags = HideFlags.HideAndDontSave;
             SceneView.RepaintAll();
             return error;
         }
@@ -100,6 +106,13 @@ namespace Red.Proportions
             source = null;
             original = copy = null;
             proxies.Clear();
+            DestroyMeshes();
+        }
+
+        static void DestroyMeshes()
+        {
+            foreach (var m in meshes) if (m) Object.DestroyImmediate(m);
+            meshes.Clear();
         }
     }
 
