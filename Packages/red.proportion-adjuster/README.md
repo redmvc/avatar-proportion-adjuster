@@ -20,9 +20,16 @@ armatures get the same changes.
 
 Without NDMF the component shows an error, and any build of an avatar that has it is stopped.
 
+## Install
+
+In the VRChat Creator Companion, add the repository
+`https://redmvc.github.io/avatar-proportion-adjuster/index.json`, then add **Proportion Adjuster** to
+your project. A copy imported from a `.unitypackage` into `Assets/Proportion Adjuster` is removed when
+you do, and your avatars keep their values.
+
 ## Use
 
-1. Drag `Proportion Adjuster.prefab` onto your avatar, or use **Add Component > Proportion
+1. Drag `Proportion Adjuster.prefab` from **Packages > Proportion Adjuster** onto your avatar, or use **Add Component > Proportion
    Adjuster** on the avatar or any object inside it. The fields fill in with the avatar's current
    proportions, so on its own it changes nothing.
 2. Measure yourself standing, in cm. All heights are from the floor:
