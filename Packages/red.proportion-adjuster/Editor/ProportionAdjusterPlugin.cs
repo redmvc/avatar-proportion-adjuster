@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using nadena.dev.ndmf;
 using UnityEditor;
@@ -40,30 +41,30 @@ namespace Red.Proportions
             var m = plan.now;
             plan.thighScale = plan.shinScale = plan.upperArmScale = plan.forearmScale = plan.neckScale = plan.hipsScale = plan.spineScale = plan.chestScale = plan.upperChestScale = plan.scale = 1f;
 
-            if (a.eyeHeightCm <= 0f) return "Eye height must be positive.";
+            if (a.EyeHeightCm <= 0f) return "Eye height must be positive.";
             if (m.eye <= 0f) return "The avatar's view position must be above the floor.";
 
             // The whole armature scales to the eye height, and the other measurements apply at that
             // size. Rounding in the measurements alone shouldn't scale an untouched avatar.
-            float scale = a.eyeHeightCm / 100f / (m.eye * m.rootScale);
+            float scale = a.EyeHeightCm / 100f / (m.eye * m.rootScale);
             if (Mathf.Abs(scale - 1f) < 0.0005f) scale = 1f;
             plan.scale = scale;
             float Units(float cm) => cm / 100f / (m.rootScale * scale);
             if (a.adjustLegs)
             {
-                if (!(a.kneeHeightCm > 0f && a.kneeHeightCm < a.hipHeightCm && a.hipHeightCm < a.eyeHeightCm)) return "Measurements must satisfy 0 < knee < hip < eye.";
+                if (!(a.KneeHeightCm > 0f && a.KneeHeightCm < a.HipHeightCm && a.HipHeightCm < a.EyeHeightCm)) return "Measurements must satisfy 0 < knee < hip < eye.";
 
-                plan.delta = m.hip - Units(a.hipHeightCm);
-                float newKnee = Units(a.kneeHeightCm);
+                plan.delta = m.hip - Units(a.HipHeightCm);
+                float newKnee = Units(a.KneeHeightCm);
                 if (newKnee <= m.ankle) return "The knee would end up below the ankle.";
                 plan.thighScale = (m.thigh - plan.delta - newKnee) / (m.thigh - m.knee);
                 plan.shinScale = (newKnee - m.ankle) / (m.knee - m.ankle);
             }
             if (a.adjustArms)
             {
-                if (a.shoulderToElbowCm <= 0f || a.elbowToWristCm <= 0f) return "Arm lengths must be positive.";
-                plan.upperArmScale = Units(a.shoulderToElbowCm) / m.upperArm;
-                plan.forearmScale = Units(a.elbowToWristCm) / m.forearm;
+                if (a.shoulderToElbow <= 0f || a.elbowToWrist <= 0f) return "Arm lengths must be positive.";
+                plan.upperArmScale = Units(a.ShoulderToElbowCm) / m.upperArm;
+                plan.forearmScale = Units(a.ElbowToWristCm) / m.forearm;
             }
 
             var anim = root.GetComponent<Animator>();
@@ -78,7 +79,7 @@ namespace Red.Proportions
             }
             if (a.adjustTorso)
             {
-                plan.eyeGain = Units(a.eyeHeightCm) - (m.eye - plan.delta);
+                plan.eyeGain = Units(a.EyeHeightCm) - (m.eye - plan.delta);
                 // Rounding in the measurements alone shouldn't stretch an untouched avatar.
                 if (Mathf.Abs(plan.eyeGain) < 0.0015f) plan.eyeGain = 0f;
                 headRise += plan.eyeGain;
@@ -235,9 +236,9 @@ namespace Red.Proportions
             desc.ViewPosition *= plan.scale;
 
             ProportionAdjuster.TryMeasure(root, out var f);
-            float Cm(float units) => units * f.rootScale * 100f;
-            summary = $"final cm: eye {Cm(f.eye):F1}, hips {Cm(f.hip):F1}, knee {Cm(f.knee):F1}, upper arm {Cm(f.upperArm):F1}, forearm {Cm(f.forearm):F1}, neck {Cm(f.neck):F1}; " +
-                      $"whole armature x{plan.scale:F4}, then hips {-plan.delta * f.rootScale * 100f:+0.0;-0.0} cm on {hips.Length} armatures, view Y {desc.ViewPosition.y:F4}; " +
+            string Size(float units) => LengthText.Plain(a, units * f.rootScale * 100f);
+            summary = $"final {a.UnitName}: eye {Size(f.eye)}, hips {Size(f.hip)}, knee {Size(f.knee)}, upper arm {Size(f.upperArm)}, forearm {Size(f.forearm)}, neck {Size(f.neck)}; " +
+                      $"whole armature x{plan.scale:F4}, then hips {LengthText.Signed(a, -plan.delta * f.rootScale * 100f)} {a.UnitName} on {hips.Length} armatures, view Y {desc.ViewPosition.y:F4}; " +
                       $"length thigh x{plan.thighScale:F3}, shin x{plan.shinScale:F3}, upper arm x{plan.upperArmScale:F3}, forearm x{plan.forearmScale:F3}, " +
                       $"neck x{plan.neckScale:F3}, hips to spine x{plan.hipsScale:F3}, spine x{plan.spineScale:F3}, chest x{plan.chestScale:F3}, upper chest x{plan.upperChestScale:F3}; {proxies.Count} skin proxies on {rebound} meshes; lower belly on {bellyMeshes} meshes";
             return null;
@@ -484,11 +485,29 @@ namespace Red.Proportions
         }
     }
 
+    internal static class LengthText
+    {
+        // A length in cm, written in the component's unit.
+        public static string Plain(ProportionAdjuster a, float cm) => (cm / a.CmPerUnit).ToString(a.units == LengthUnit.Inches ? "F2" : "F1");
+        public static string Signed(ProportionAdjuster a, float cm) => (cm / a.CmPerUnit).ToString(a.units == LengthUnit.Inches ? "+0.00;-0.00" : "+0.0;-0.0");
+    }
+
     // Shows what the build will do, measured from the avatar in the scene, and drives the preview.
     [CustomEditor(typeof(ProportionAdjuster))]
     internal class ProportionAdjusterEditor : Editor
     {
         string previewError;
+
+        // Each measurement below the eye height, with the checkbox that locks its proportion.
+        static readonly (string measurement, string locked)[] Lockable =
+        {
+            (nameof(ProportionAdjuster.hipHeight), nameof(ProportionAdjuster.lockHipHeight)),
+            (nameof(ProportionAdjuster.kneeHeight), nameof(ProportionAdjuster.lockKneeHeight)),
+            (nameof(ProportionAdjuster.shoulderToElbow), nameof(ProportionAdjuster.lockShoulderToElbow)),
+            (nameof(ProportionAdjuster.elbowToWrist), nameof(ProportionAdjuster.lockElbowToWrist)),
+        };
+
+        static bool IsMeasurement(string field) => field == nameof(ProportionAdjuster.eyeHeight) || Lockable.Any(l => l.measurement == field);
 
         // A component from the prefab arrives unmeasured; fill in the avatar it was dropped on.
         void OnEnable()
@@ -501,7 +520,7 @@ namespace Red.Proportions
 
         // What an input's reset button sets it to, or null when there's nothing to set it from.
         // Each input is independent; the plan's error covers combinations that don't work.
-        internal static float? AvatarValue(string field, Transform root)
+        internal static float? AvatarValue(string field, Transform root, LengthUnit unit)
         {
             switch (field)
             {
@@ -524,14 +543,14 @@ namespace Red.Proportions
             }
             if (!root || !ProportionAdjuster.TryMeasure(root, out var m)) return null;
 
-            float Cm(float units) => Mathf.Round(units * m.rootScale * 1000f) / 10f;
+            float Own(float units) => ProportionAdjuster.FromAvatar(units, m.rootScale, unit);
             switch (field)
             {
-                case nameof(ProportionAdjuster.eyeHeightCm): return Cm(m.eye);
-                case nameof(ProportionAdjuster.hipHeightCm): return Cm(m.hip);
-                case nameof(ProportionAdjuster.kneeHeightCm): return Cm(m.knee);
-                case nameof(ProportionAdjuster.shoulderToElbowCm): return Cm(m.upperArm);
-                case nameof(ProportionAdjuster.elbowToWristCm): return Cm(m.forearm);
+                case nameof(ProportionAdjuster.eyeHeight): return Own(m.eye);
+                case nameof(ProportionAdjuster.hipHeight): return Own(m.hip);
+                case nameof(ProportionAdjuster.kneeHeight): return Own(m.knee);
+                case nameof(ProportionAdjuster.shoulderToElbow): return Own(m.upperArm);
+                case nameof(ProportionAdjuster.elbowToWrist): return Own(m.forearm);
             }
             return null;
         }
@@ -547,53 +566,261 @@ namespace Red.Proportions
             return true;
         }
 
+        // False for an input that an unchecked setting leaves unused. Those are greyed out.
+        internal static bool IsUsed(string field, SerializedObject so)
+        {
+            bool On(string setting) => so.FindProperty(setting).boolValue;
+            switch (field)
+            {
+                case nameof(ProportionAdjuster.hipHeight):
+                case nameof(ProportionAdjuster.kneeHeight):
+                case nameof(ProportionAdjuster.thighThickness):
+                case nameof(ProportionAdjuster.shinThickness):
+                    return On(nameof(ProportionAdjuster.adjustLegs));
+                case nameof(ProportionAdjuster.shoulderToElbow):
+                case nameof(ProportionAdjuster.elbowToWrist):
+                case nameof(ProportionAdjuster.upperArmThickness):
+                case nameof(ProportionAdjuster.forearmThickness):
+                    return On(nameof(ProportionAdjuster.adjustArms));
+                case nameof(ProportionAdjuster.hipsStretch):
+                case nameof(ProportionAdjuster.spineStretch):
+                case nameof(ProportionAdjuster.chestStretch):
+                case nameof(ProportionAdjuster.upperChestStretch):
+                    // The torso still balances a changed neck when it isn't adjusted otherwise.
+                    return On(nameof(ProportionAdjuster.adjustTorso)) || !Mathf.Approximately(so.FindProperty(nameof(ProportionAdjuster.neckLength)).floatValue, 1f);
+            }
+            return true;
+        }
+
+        // Scaling and converting leave float noise, such as 162.99999 for 163. A result within about a
+        // float step of a number with four decimals is taken to be that number.
+        internal static float Tidy(double value)
+        {
+            double rounded = System.Math.Round(value, 4);
+            return (float)(System.Math.Abs(rounded - value) <= System.Math.Abs(value) * 1e-7 ? rounded : value);
+        }
+
+        // Sets the eye height, and keeps every locked measurement in proportion to it. While the
+        // eye height isn't above 0 there's no proportion to keep, so the last one that was is
+        // remembered and used once it is again.
+        internal static void ChangeEyeHeight(SerializedObject so, float value)
+        {
+            var eye = so.FindProperty(nameof(ProportionAdjuster.eyeHeight));
+            var last = so.FindProperty(nameof(ProportionAdjuster.lastValidEyeHeight));
+            float from = eye.floatValue > 0f ? eye.floatValue : last.floatValue;
+            if (value > 0f)
+            {
+                if (from > 0f && value != from)
+                    foreach (var (measurement, locked) in Lockable)
+                    {
+                        if (!so.FindProperty(locked).boolValue) continue;
+                        var m = so.FindProperty(measurement);
+                        m.floatValue = Tidy((double)m.floatValue * value / from);
+                    }
+                if (last.floatValue != 0f) last.floatValue = 0f;
+            }
+            else if (eye.floatValue > 0f) last.floatValue = eye.floatValue;
+            eye.floatValue = value;
+        }
+
+        // Converts the measurements after the unit changed, so they stay the same lengths.
+        internal static void ConvertMeasurements(SerializedObject so, LengthUnit from, LengthUnit to)
+        {
+            if (from == to) return;
+            double factor = to == LengthUnit.Inches ? 1.0 / 2.54 : 2.54;
+            var fields = Lockable.Select(l => l.measurement).Append(nameof(ProportionAdjuster.eyeHeight)).Append(nameof(ProportionAdjuster.lastValidEyeHeight));
+            foreach (var field in fields)
+            {
+                var p = so.FindProperty(field);
+                p.floatValue = Tidy(p.floatValue * factor);
+            }
+        }
+
+        // A number box that shows at most four decimals until it's selected. Unity's own box,
+        // which shows the value in full (7 significant digits), is always there and takes the
+        // input; the short text is painted over it while it isn't selected.
+        static float NumberField(Rect rect, GUIContent label, float value, string controlName)
+        {
+            string shortText = value.ToString("0.####", CultureInfo.InvariantCulture);
+            if (!GUI.enabled)
+            {
+                // It can't be selected, and painting over a faded box would show both texts.
+                EditorGUI.FloatField(rect, label, float.Parse(shortText, CultureInfo.InvariantCulture));
+                return value;
+            }
+
+            GUI.SetNextControlName(controlName);
+            float result = EditorGUI.FloatField(rect, label, value);
+            bool shortened = shortText != value.ToString("g7", CultureInfo.InvariantCulture);
+            if (shortened && Event.current.type == EventType.Repaint && GUI.GetNameOfFocusedControl() != controlName)
+            {
+                var box = rect;
+                box.xMin += EditorGUIUtility.labelWidth + 2f;
+                EditorStyles.numberField.Draw(box, new GUIContent(shortText), false, false, false, false);
+            }
+            return result;
+        }
+
+        const float ResetWidth = 20f, LockWidth = 50f;
+        static readonly GUIContent LockLabel = new GUIContent("Lock",
+            "Lock this measurement's proportion to the eye height. While it's locked it can't be edited, and it changes with the eye height to stay the same share of it.");
+        static readonly GUIContent LockAllLabel = new GUIContent("Lock All Proportions",
+            "Lock or unlock every measurement's proportion to the eye height at once. With all of them locked, the eye height resizes the avatar without changing its shape.");
+
         // Everything but the Script field, with a reset button beside each number and slider.
         void DrawFields(Transform root)
         {
-            const float buttonWidth = 20f;
-            var icon = EditorGUIUtility.IconContent("Refresh").image;
             var prop = serializedObject.GetIterator();
             prop.NextVisible(true);
             do
             {
-                if (prop.name == "m_Script") continue;
-                if (root && !HasBoneFor(prop.name, root))
+                string name = prop.name;
+                // The lock checkboxes are drawn beside their measurements.
+                if (name == "m_Script" || Lockable.Any(l => l.locked == name)) continue;
+                if (root && !HasBoneFor(name, root))
                 {
                     // A header belongs to the field under it, so it has to be drawn for a hidden one.
-                    var header = typeof(ProportionAdjuster).GetField(prop.name)?.GetCustomAttributes(typeof(HeaderAttribute), false).FirstOrDefault() as HeaderAttribute;
-                    if (header != null)
-                    {
-                        EditorGUILayout.Space();
-                        EditorGUILayout.LabelField(header.header, EditorStyles.boldLabel);
-                    }
+                    var header = HeaderOf(name);
+                    if (header != null) DrawHeader(EditorGUILayout.GetControlRect(false, HeaderHeight), header);
                     continue;
                 }
-                if (prop.propertyType != SerializedPropertyType.Float)
+
+                bool used = IsUsed(name, serializedObject);
+                if (name == nameof(ProportionAdjuster.units)) DrawUnits(prop);
+                else if (IsMeasurement(name)) using (new EditorGUI.DisabledScope(!used)) DrawMeasurement(prop, root);
+                else if (prop.propertyType == SerializedPropertyType.Float) DrawSlider(prop, root, used);
+                else if (prop.propertyType == SerializedPropertyType.Boolean) DrawSetting(prop);
+                else EditorGUILayout.PropertyField(prop, true);
+            } while (prop.NextVisible(false));
+        }
+
+        // The sliders' section headers are drawn here, laid out like Unity's own (half a line of
+        // space, then the title), so a greyed-out or hidden slider doesn't take its section's
+        // header with it.
+        static float HeaderHeight => EditorGUIUtility.singleLineHeight * 1.5f;
+
+        static string HeaderOf(string field) =>
+            (typeof(ProportionAdjuster).GetField(field)?.GetCustomAttributes(typeof(HeaderAttribute), false).FirstOrDefault() as HeaderAttribute)?.header;
+
+        static void DrawHeader(Rect rect, string header)
+        {
+            rect.yMin += EditorGUIUtility.singleLineHeight * 0.5f;
+            rect.height = EditorGUIUtility.singleLineHeight;
+            GUI.Label(rect, header, EditorStyles.boldLabel);
+        }
+
+        static readonly GUIContent RebuildLabel = new GUIContent("Rebuild Humanoid Avatar (unusual)");
+
+        // The settings share a label width that fits the longest of them, so their checkboxes line up.
+        void DrawSetting(SerializedProperty prop)
+        {
+            float width = EditorGUIUtility.labelWidth;
+            EditorGUIUtility.labelWidth = Mathf.Max(width, EditorStyles.boldLabel.CalcSize(RebuildLabel).x + 6f);
+            if (prop.name != nameof(ProportionAdjuster.rebuildHumanoidAvatar)) EditorGUILayout.PropertyField(prop);
+            else EditorGUILayout.PropertyField(prop, new GUIContent(RebuildLabel.text, prop.tooltip));
+            EditorGUIUtility.labelWidth = width;
+
+            if (prop.name == nameof(ProportionAdjuster.rebuildHumanoidAvatar) && !prop.boolValue)
+                EditorGUILayout.HelpBox("With this off, animations still use the avatar's old proportions, so they may break. Sitting and other poses that place the hips are the most likely to.", MessageType.Warning);
+        }
+
+        // The unit, then the checkbox that stands for all the lock checkboxes below it: checked
+        // when they all are, and checking or unchecking it does the same to all of them.
+        void DrawUnits(SerializedProperty prop)
+        {
+            int before = prop.enumValueIndex;
+            EditorGUILayout.PropertyField(prop);
+            if (prop.enumValueIndex != before) ConvertMeasurements(serializedObject, (LengthUnit)before, (LengthUnit)prop.enumValueIndex);
+
+            var locks = Lockable.Select(l => serializedObject.FindProperty(l.locked)).ToList();
+            EditorGUI.BeginChangeCheck();
+            bool all = EditorGUILayout.Toggle(LockAllLabel, locks.All(l => l.boolValue));
+            if (EditorGUI.EndChangeCheck()) foreach (var l in locks) l.boolValue = all;
+        }
+
+        // Number box, lock checkbox (not for the eye height) and reset button.
+        void DrawMeasurement(SerializedProperty prop, Transform root)
+        {
+            bool isEye = prop.name == nameof(ProportionAdjuster.eyeHeight);
+            var lockProp = isEye ? null : serializedObject.FindProperty(Lockable.First(l => l.measurement == prop.name).locked);
+            bool locked = lockProp != null && lockProp.boolValue;
+
+            var rect = EditorGUILayout.GetControlRect();
+            var button = new Rect(rect.xMax - ResetWidth, rect.y, ResetWidth, rect.height);
+            var lockRect = new Rect(button.x - 2f - LockWidth, rect.y, LockWidth, rect.height);
+            var field = rect;
+            field.xMax = lockRect.x - 4f;
+
+            using (new EditorGUI.DisabledScope(locked))
+            {
+                var label = EditorGUI.BeginProperty(field, new GUIContent(prop.displayName, prop.tooltip), prop);
+                EditorGUI.BeginChangeCheck();
+                float value = NumberField(field, label, prop.floatValue, prop.name);
+                if (EditorGUI.EndChangeCheck())
                 {
-                    EditorGUILayout.PropertyField(prop, true);
-                    continue;
+                    if (isEye) ChangeEyeHeight(serializedObject, value);
+                    else prop.floatValue = value;
                 }
+                EditorGUI.EndProperty();
+            }
 
-                // The height includes any header above the input, so the button sits on the last line.
-                var rect = EditorGUILayout.GetControlRect(true, EditorGUI.GetPropertyHeight(prop, true));
-                var field = rect;
-                field.width -= buttonWidth + 2f;
-                var button = new Rect(rect.xMax - buttonWidth, rect.yMax - EditorGUIUtility.singleLineHeight, buttonWidth, EditorGUIUtility.singleLineHeight);
-                EditorGUI.PropertyField(field, prop, true);
+            if (lockProp != null)
+            {
+                var label = EditorGUI.BeginProperty(lockRect, LockLabel, lockProp);
+                EditorGUI.BeginChangeCheck();
+                bool now = EditorGUI.ToggleLeft(lockRect, label, lockProp.boolValue);
+                if (EditorGUI.EndChangeCheck()) lockProp.boolValue = now;
+                EditorGUI.EndProperty();
+            }
 
-                var value = AvatarValue(prop.name, root);
-                var tooltip = prop.name.EndsWith("Cm") ? "Back to the avatar's own measurement."
-                    : prop.name == nameof(ProportionAdjuster.hipsStretch) ? "Back to 0, keeping the gap from the hips to the spine."
+            var units = (LengthUnit)serializedObject.FindProperty(nameof(ProportionAdjuster.units)).enumValueIndex;
+            var own = AvatarValue(prop.name, root, units);
+            using (new EditorGUI.DisabledScope(locked || !own.HasValue || Mathf.Abs(prop.floatValue - own.Value) < 0.001f))
+            {
+                if (GUI.Button(button, new GUIContent(ResetIcon, "Back to the avatar's own measurement."), EditorStyles.iconButton))
+                {
+                    if (isEye) ChangeEyeHeight(serializedObject, own.Value);
+                    else prop.floatValue = own.Value;
+                    GUI.changed = true;
+                }
+            }
+        }
+
+        static Texture ResetIcon => EditorGUIUtility.IconContent("Refresh").image;
+
+        // Slider and reset button, under the section header if this is the section's first input.
+        void DrawSlider(SerializedProperty prop, Transform root, bool used)
+        {
+            string header = HeaderOf(prop.name);
+            var rect = EditorGUILayout.GetControlRect(true, (header != null ? HeaderHeight : 0f) + EditorGUIUtility.singleLineHeight);
+            if (header != null)
+            {
+                DrawHeader(rect, header);
+                rect.yMin += HeaderHeight;
+            }
+            var field = rect;
+            field.width -= ResetWidth + 2f;
+            var button = new Rect(rect.xMax - ResetWidth, rect.y, ResetWidth, rect.height);
+
+            using (new EditorGUI.DisabledScope(!used))
+            {
+                var label = new GUIContent(prop.displayName, prop.tooltip);
+                var range = typeof(ProportionAdjuster).GetField(prop.name)?.GetCustomAttributes(typeof(RangeAttribute), false).FirstOrDefault() as RangeAttribute;
+                if (range != null) EditorGUI.Slider(field, prop, range.min, range.max, label);
+                else EditorGUI.PropertyField(field, prop, label);
+
+                var value = AvatarValue(prop.name, root, LengthUnit.Centimetres);
+                var tooltip = prop.name == nameof(ProportionAdjuster.hipsStretch) ? "Back to 0, keeping the gap from the hips to the spine."
                     : prop.name.EndsWith("Stretch") ? "Back to 1, an even stretch." : "Back to 1, the avatar's own.";
                 using (new EditorGUI.DisabledScope(!value.HasValue || Mathf.Abs(prop.floatValue - value.Value) < 0.001f))
                 {
-                    if (GUI.Button(button, new GUIContent(icon, tooltip), EditorStyles.iconButton))
+                    if (GUI.Button(button, new GUIContent(ResetIcon, tooltip), EditorStyles.iconButton))
                     {
                         prop.floatValue = value.Value;
                         GUI.changed = true;
                     }
                 }
-            } while (prop.NextVisible(false));
+            }
         }
 
         // What each torso bone takes of the stretch.
@@ -610,7 +837,7 @@ namespace Red.Proportions
             }).ToList();
             float total = rows.Sum(r => r.gain);
             string Row((HumanBodyBones bone, float factor, float gain) r) =>
-                $"  {(r.bone == HumanBodyBones.Hips ? "Hips to spine" : r.bone.ToString())} length x{r.factor:F3}, {p.FinalCm(r.gain):+0.0;-0.0} cm" + (total != 0f ? $" ({r.gain / total * 100f:F0}% of the stretch)" : "") +
+                $"  {(r.bone == HumanBodyBones.Hips ? "Hips to spine" : r.bone.ToString())} length x{r.factor:F3}, {LengthText.Signed(a, p.FinalCm(r.gain))} {a.UnitName}" + (total != 0f ? $" ({r.gain / total * 100f:F0}% of the stretch)" : "") +
                 (Mathf.Approximately(a.TorsoThickness(r.bone), 1f) ? "" : $", thickness x{a.TorsoThickness(r.bone):F2}");
             return string.Join("\n", rows.Select(Row));
         }
@@ -644,18 +871,18 @@ namespace Red.Proportions
             var error = ProportionPlan.Compute(adjuster, desc.transform, out var p);
             if (error != null) { EditorGUILayout.HelpBox(error, MessageType.Error); return; }
 
-            string Row(string name, float avatarUnits, float finalUnits) => $"  {name} {p.NowCm(avatarUnits):F1} -> {p.FinalCm(finalUnits):F1}\n";
+            string Row(string name, float avatarUnits, float finalUnits) => $"  {name} {LengthText.Plain(adjuster, p.NowCm(avatarUnits))} -> {LengthText.Plain(adjuster, p.FinalCm(finalUnits))}\n";
             string Shape(float length, float thickness) => $"length x{length:F3}, thickness x{thickness:F2}";
             var m = p.now;
             var text =
-                "Avatar now -> after the build, in cm:\n" +
+                $"Avatar now -> after the build, in {(adjuster.units == LengthUnit.Inches ? "inches" : "cm")}:\n" +
                 Row("Eye", m.eye, p.NewEye) +
                 Row("Hips", m.hip, m.hip - p.delta) +
                 Row("Knee", m.knee, p.FinalKnee) +
                 Row("Upper arm", m.upperArm, m.upperArm * p.upperArmScale) +
                 Row("Forearm", m.forearm, m.forearm * p.forearmScale) +
                 Row("Neck", m.neck, m.neck * p.neckScale) +
-                $"\nBuild will: scale the whole armature x{p.scale:F3}, then move the hips {-p.FinalCm(p.delta):+0.0;-0.0} cm\n" +
+                $"\nBuild will: scale the whole armature x{p.scale:F3}, then move the hips {LengthText.Signed(adjuster, -p.FinalCm(p.delta))} {adjuster.UnitName}\n" +
                 (adjuster.adjustLegs ? $"  Thigh {Shape(p.thighScale, adjuster.thighThickness)}\n  Shin {Shape(p.shinScale, adjuster.shinThickness)}\n" : "") +
                 (adjuster.adjustArms ? $"  Upper arm {Shape(p.upperArmScale, adjuster.upperArmThickness)}\n  Forearm {Shape(p.forearmScale, adjuster.forearmThickness)}\n" : "") +
                 (p.neckScale != 1f ? $"  Neck {Shape(p.neckScale, adjuster.neckThickness)}\n" : "") +

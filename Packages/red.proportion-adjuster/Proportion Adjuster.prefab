@@ -44,11 +44,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 24246eb9718870c4dbeaf6cb549836d2, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  eyeHeightCm: 0
-  hipHeightCm: 0
-  kneeHeightCm: 0
-  shoulderToElbowCm: 0
-  elbowToWristCm: 0
+  adjustLegs: 1
+  adjustArms: 1
+  adjustTorso: 1
+  rebuildHumanoidAvatar: 1
+  units: 0
+  eyeHeight: 0
+  hipHeight: 0
+  kneeHeight: 0
+  shoulderToElbow: 0
+  elbowToWrist: 0
+  lockHipHeight: 1
+  lockKneeHeight: 1
+  lockShoulderToElbow: 1
+  lockElbowToWrist: 1
+  lastValidEyeHeight: 0
   thighThickness: 1
   shinThickness: 1
   upperArmThickness: 1
@@ -63,7 +73,3 @@ MonoBehaviour:
   spineStretch: 1
   chestStretch: 1
   upperChestStretch: 1
-  adjustLegs: 1
-  adjustArms: 1
-  adjustTorso: 1
-  rebuildHumanoidAvatar: 1
