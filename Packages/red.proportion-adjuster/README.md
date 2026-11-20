@@ -11,7 +11,8 @@ Turn off **Adjust Torso** to let the eyes move with the hips instead.
 
 Bones are never scaled. Joints are moved along the limb and the skin is stretched separately, so
 SPS sockets keep working, and length and thickness can be set independently. VRCFury clothing
-armatures get the same changes.
+armatures get the same changes, and an object that a VRCFury Armature Link attaches to a bone, such
+as a prop held in a hand, moves with that bone.
 
 ## Requirements
 

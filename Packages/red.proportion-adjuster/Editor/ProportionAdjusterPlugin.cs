@@ -138,6 +138,9 @@ namespace Red.Proportions
             var all = root.GetComponentsInChildren<Transform>(true);
             Transform[] Named(HumanBodyBones b) => all.Where(t => t.name == anim.GetBoneTransform(b).name).ToArray();
 
+            // Before anything moves, as it notes where each linked object sits against its bone.
+            var linked = LinkedObjects.Find(root, anim);
+
             var head = anim.GetBoneTransform(HumanBodyBones.Head);
             var headBefore = root.InverseTransformPoint(head.position);
             var hips = Named(HumanBodyBones.Hips);
@@ -199,6 +202,8 @@ namespace Red.Proportions
                 }
             }
 
+            int carried = linked.Count(l => l.Follow());
+
             // The view point follows the head: down with the hips, and back up by the torso (a
             // slanted torso can also shift it slightly forward or back).
             var desc = root.GetComponent<VRCAvatarDescriptor>();
@@ -240,7 +245,7 @@ namespace Red.Proportions
             summary = $"final {a.UnitName}: eye {Size(f.eye)}, hips {Size(f.hip)}, knee {Size(f.knee)}, upper arm {Size(f.upperArm)}, forearm {Size(f.forearm)}, neck {Size(f.neck)}; " +
                       $"whole armature x{plan.scale:F4}, then hips {LengthText.Signed(a, -plan.delta * f.rootScale * 100f)} {a.UnitName} on {hips.Length} armatures, view Y {desc.ViewPosition.y:F4}; " +
                       $"length thigh x{plan.thighScale:F3}, shin x{plan.shinScale:F3}, upper arm x{plan.upperArmScale:F3}, forearm x{plan.forearmScale:F3}, " +
-                      $"neck x{plan.neckScale:F3}, hips to spine x{plan.hipsScale:F3}, spine x{plan.spineScale:F3}, chest x{plan.chestScale:F3}, upper chest x{plan.upperChestScale:F3}; {proxies.Count} skin proxies on {rebound} meshes; lower belly on {bellyMeshes} meshes";
+                      $"neck x{plan.neckScale:F3}, hips to spine x{plan.hipsScale:F3}, spine x{plan.spineScale:F3}, chest x{plan.chestScale:F3}, upper chest x{plan.upperChestScale:F3}; {proxies.Count} skin proxies on {rebound} meshes; lower belly on {bellyMeshes} meshes; {carried} linked objects moved with their bones";
             return null;
         }
 
@@ -376,6 +381,131 @@ namespace Red.Proportions
                 result[k] = stretch[j];
             }
             return result;
+        }
+    }
+
+    // Objects that a VRCFury Armature Link will attach to one of the avatar's bones while keeping
+    // their place: a prop held in a hand, a light on the head. VRCFury runs after this pass and
+    // attaches each one where it then is, so an object left behind when its bone moved would end
+    // up beside the hand instead of in it. Each one found here keeps the position and rotation
+    // it had against its bone. VRCFury is read through its serialised data, so this package
+    // doesn't depend on it.
+    internal static class LinkedObjects
+    {
+        // The bones the reshape moves by name, in every armature under the avatar. An object which
+        // holds a transform named like one of them is an armature copy (clothing) and has already
+        // had the same changes as the avatar's own.
+        static readonly HumanBodyBones[] Reshaped =
+        {
+            HumanBodyBones.Hips, HumanBodyBones.Spine, HumanBodyBones.Chest, HumanBodyBones.UpperChest, HumanBodyBones.Neck,
+            HumanBodyBones.LeftUpperLeg, HumanBodyBones.RightUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.RightLowerLeg,
+            HumanBodyBones.LeftUpperArm, HumanBodyBones.RightUpperArm, HumanBodyBones.LeftLowerArm, HumanBodyBones.RightLowerArm,
+        };
+
+        internal struct Link
+        {
+            public Transform obj, bone;
+            // Of obj, in the bone's frame.
+            public Vector3 position;
+            public Quaternion rotation;
+
+            // Puts the object back where it was against its bone. True if that moved it.
+            public bool Follow()
+            {
+                var toPosition = bone.TransformPoint(position);
+                var toRotation = bone.rotation * rotation;
+                if ((toPosition - obj.position).sqrMagnitude < 1e-10f && Quaternion.Angle(toRotation, obj.rotation) < 0.001f) return false;
+                obj.SetPositionAndRotation(toPosition, toRotation);
+                return true;
+            }
+        }
+
+        // Parents come first, so a linked object inside another one is placed last.
+        public static List<Link> Find(Transform root, Animator anim)
+        {
+            var reshaped = new HashSet<string>(Reshaped.Select(anim.GetBoneTransform).Where(t => t).Select(t => t.name));
+            var links = new List<Link>();
+            foreach (var component in root.GetComponentsInChildren<MonoBehaviour>(true))
+            {
+                if (!component || component.GetType().FullName != "VF.Model.VRCFury") continue;
+                using (var serialized = new SerializedObject(component))
+                {
+                    foreach (var feature in Features(serialized))
+                    {
+                        if (!feature.managedReferenceFullTypename.EndsWith(" VF.Model.Feature.ArmatureLink")) continue;
+                        var linkedObject = feature.FindPropertyRelative("propBone")?.objectReferenceValue as GameObject;
+                        if (!linkedObject) continue;
+                        var obj = linkedObject.transform;
+                        var bone = Target(feature, root, anim);
+                        // Inside its bone it moves with it anyway, and a bone can't follow something it is inside.
+                        if (!bone || obj == root || !obj.IsChildOf(root) || obj.IsChildOf(bone) || bone.IsChildOf(obj)) continue;
+                        if (obj.GetComponentsInChildren<Transform>(true).Any(t => reshaped.Contains(t.name))) continue;
+                        links.Add(new Link { obj = obj, bone = bone, position = bone.InverseTransformPoint(obj.position), rotation = Quaternion.Inverse(bone.rotation) * obj.rotation });
+                    }
+                }
+            }
+            return links.OrderBy(l => l.obj.GetComponentsInParent<Transform>(true).Length).ToList();
+        }
+
+        // A VRCFury component holds one feature in `content`; ones saved by old versions hold a list.
+        static IEnumerable<SerializedProperty> Features(SerializedObject serialized)
+        {
+            var content = serialized.FindProperty("content");
+            if (content != null && content.propertyType == SerializedPropertyType.ManagedReference) yield return content;
+            var old = serialized.FindProperty("config.features");
+            if (old == null || !old.isArray) yield break;
+            for (int i = 0; i < old.arraySize; i++)
+            {
+                var feature = old.GetArrayElementAtIndex(i);
+                if (feature.propertyType == SerializedPropertyType.ManagedReference) yield return feature;
+            }
+        }
+
+        // The bone VRCFury will pick: the first entry of Link To that exists and, failing that,
+        // the nearest bone above the first humanoid entry that the avatar has.
+        static Transform Target(SerializedProperty link, Transform root, Animator anim)
+        {
+            var linkTo = link.FindPropertyRelative("linkTo");
+            var version = link.FindPropertyRelative("version");
+            // Before version 6 of the feature the target was a single bone or path.
+            if (linkTo == null || !linkTo.isArray || (version != null && version.intValue < 6))
+            {
+                var path = link.FindPropertyRelative("bonePathOnAvatar")?.stringValue;
+                if (!string.IsNullOrWhiteSpace(path)) return Inside(root.Find(path), root);
+                var only = link.FindPropertyRelative("boneOnAvatar");
+                return only != null ? Bone(anim, only.intValue, true) : null;
+            }
+
+            int firstHumanoid = -1;
+            for (int i = 0; i < linkTo.arraySize; i++)
+            {
+                var to = linkTo.GetArrayElementAtIndex(i);
+                bool useBone = to.FindPropertyRelative("useBone").boolValue;
+                int bone = to.FindPropertyRelative("bone").intValue;
+                var offset = to.FindPropertyRelative("offset").stringValue;
+                bool hasOffset = !string.IsNullOrWhiteSpace(offset);
+                if (useBone && !hasOffset && firstHumanoid < 0) firstHumanoid = bone;
+
+                Transform target;
+                if (useBone) target = Bone(anim, bone, false);
+                else if (to.FindPropertyRelative("useObj").boolValue) target = (to.FindPropertyRelative("obj").objectReferenceValue as GameObject)?.transform;
+                else target = root;
+                if (target && hasOffset) target = target.Find(offset);
+                if (Inside(target, root)) return target;
+            }
+            return firstHumanoid >= 0 ? Bone(anim, firstHumanoid, true) : null;
+        }
+
+        static Transform Inside(Transform t, Transform root) => t && t.IsChildOf(root) ? t : null;
+
+        static Transform Bone(Animator anim, int bone, bool orAbove)
+        {
+            for (; bone >= 0 && bone < (int)HumanBodyBones.LastBone; bone = HumanTrait.GetParentBone(bone))
+            {
+                var t = anim.GetBoneTransform((HumanBodyBones)bone);
+                if (t || !orAbove) return t;
+            }
+            return null;
         }
     }
 
